@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { LogOut, LayoutDashboard, BookOpen, Layers } from 'lucide-react';
-import StatCard from '../components/StatCard';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, BadgeDollarSign, Landmark, Globe, Gavel, Brain, CheckSquare } from 'lucide-react';
 import UploadForm from '../components/UploadForm';
 import SearchBar from '../components/SearchBar';
+import { supabase } from '../supabaseClient';
 
 // Mock chart data for different ages
 const mockChartData = {
@@ -26,8 +27,53 @@ const mockChartData = {
 
 const AGES = ['5', '6', '7', '8', '9', '10'];
 
+const SUBJECT_ICONS = {
+  'Science': FlaskConical,
+  'Economics': BadgeDollarSign,
+  'History': Landmark,
+  'Geography': Globe,
+  'Civics': Gavel,
+  'Gen. Knowledge': Brain
+};
+
 export default function Dashboard({ onLogout }) {
   const [selectedAge, setSelectedAge] = useState('5');
+  const [flashcardCounts, setFlashcardCounts] = useState({});
+
+  useEffect(() => {
+    async function fetchCounts() {
+      const { data, error } = await supabase.from('flashcard_decks').select('subject, applicable_ages');
+      if (error) {
+        console.error('Error fetching deck counts:', error);
+        return;
+      }
+      
+      const counts = {};
+      AGES.forEach(age => {
+        counts[age] = {};
+        Object.keys(SUBJECT_ICONS).forEach(subj => {
+          counts[age][subj] = 0;
+        });
+      });
+      
+      if (data) {
+        data.forEach(deck => {
+          if (deck.applicable_ages && Array.isArray(deck.applicable_ages)) {
+            deck.applicable_ages.forEach(ageNum => {
+              const ageStr = ageNum.toString();
+              if (counts[ageStr] && counts[ageStr][deck.subject] !== undefined) {
+                counts[ageStr][deck.subject] += 1;
+              }
+            });
+          }
+        });
+      }
+      
+      setFlashcardCounts(counts);
+    }
+    
+    fetchCounts();
+  }, []);
 
   // Fallback to empty array if no specific mock data for selected age
   const chartData = mockChartData[selectedAge] || [
@@ -39,13 +85,6 @@ export default function Dashboard({ onLogout }) {
     { subject: 'Gen. Knowledge', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
   ];
 
-  const stats = [
-    { id: 1, title: 'Total Quickbooks', value: '145', icon: 'BookOpen', color: '#6366f1' },
-    { id: 2, title: 'Total Flashcards', value: '328', icon: 'Layers', color: '#ec4899' },
-    { id: 3, title: 'Total Quizzes', value: '136', icon: 'CheckSquare', color: '#05cd99' },
-    { id: 4, title: `Active Age Group`, value: `Age ${selectedAge}`, icon: 'Users', color: '#f59e0b' },
-  ];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header */}
@@ -54,7 +93,7 @@ export default function Dashboard({ onLogout }) {
           <div style={{ backgroundColor: 'var(--primary)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', color: 'white' }}>
             <LayoutDashboard size={24} />
           </div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>Simply Kids <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>| Studio</span></h1>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>Zimply Kids <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>| Studio</span></h1>
         </div>
         
         {/* Search Bar centered in header */}
@@ -96,78 +135,74 @@ export default function Dashboard({ onLogout }) {
       {/* Main Content */}
       <main style={{ flex: 1, padding: '0 1.5rem 2rem 1.5rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
         
+        {/* Top Section: Upload Form */}
         <div className="animate-fade-in delay-1" style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-main)', margin: 0 }}>Overview</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter Data by Age:</label>
-              <select className="form-select" style={{ width: '120px', padding: '0.5rem 1rem' }} value={selectedAge} onChange={(e) => setSelectedAge(e.target.value)}>
+          <UploadForm />
+        </div>
+
+        {/* Overview Section */}
+        <div className="animate-fade-in delay-2">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-main)', margin: 0 }}>Content Overview</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#ffffff', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', boxShadow: 'var(--shadow-soft)' }}>
+              <label style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: 600 }}>Age Group:</label>
+              <select className="form-select" style={{ width: '100px', padding: '0.25rem 0.5rem', border: 'none', backgroundColor: 'transparent', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer' }} value={selectedAge} onChange={(e) => setSelectedAge(e.target.value)}>
                 {AGES.map(a => <option key={a} value={a}>Age {a}</option>)}
               </select>
             </div>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'stretch' }}>
-            {/* Table Area */}
-            <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto', width: '100%', height: '100%' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
-                  <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>Subject</th>
-                      <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <BookOpen size={18} color="#6366f1" /> Quickbooks
-                        </div>
-                      </th>
-                      <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Layers size={18} color="#ec4899" /> Flashcards
-                        </div>
-                      </th>
-                      <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontWeight: 800, color: '#05cd99', fontSize: '1.1rem', padding: '0 4px' }}>Q</span> Quizzes
-                        </div>
-                      </th>
-                      <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {chartData.map((row, idx) => {
-                      const total = row.quickbooks + row.flashcards + row.quizzes;
-                      return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                          <td style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-main)' }}>{row.subject}</td>
-                          <td style={{ padding: '1rem 1.5rem', color: '#6366f1', fontWeight: 700, fontSize: '1.1rem' }}>{row.quickbooks}</td>
-                          <td style={{ padding: '1rem 1.5rem', color: '#ec4899', fontWeight: 700, fontSize: '1.1rem' }}>{row.flashcards}</td>
-                          <td style={{ padding: '1rem 1.5rem', color: '#05cd99', fontWeight: 700, fontSize: '1.1rem' }}>{row.quizzes}</td>
-                          <td style={{ padding: '1rem 1.5rem', color: 'var(--text-main)', fontWeight: 700, fontSize: '1.1rem', backgroundColor: '#f8fafc' }}>{total}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            
-            {/* Stats Summary Column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {stats.slice(0, 3).map(stat => (
-                <StatCard 
-                  key={stat.id} 
-                  title={stat.title} 
-                  value={stat.value} 
-                  iconName={stat.icon} 
-                  color={stat.color} 
-                />
-              ))}
-            </div>
+          {/* Subject Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+            {chartData.map((row, idx) => {
+              const Icon = SUBJECT_ICONS[row.subject] || BookOpen;
+              const realFlashcardCount = flashcardCounts[selectedAge]?.[row.subject] || 0;
+              return (
+                <div key={idx} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
+                  {/* Subject Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
+                      <Icon size={24} color="var(--primary)" />
+                    </div>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>{row.subject}</h3>
+                  </div>
+                  
+                  {/* Subject Target Numbers */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <Link to="/quickbooks/create" style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
+                        <BookOpen size={18} color="#6366f1" />
+                        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Quickbooks</span>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#6366f1' }}>
+                        {row.quickbooks} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 8</span>
+                      </div>
+                    </Link>
+                    
+                    <Link to={`/decks/${row.subject}/${selectedAge}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
+                        <Layers size={18} color="#ec4899" />
+                        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Flashcards</span>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#ec4899' }}>
+                        {realFlashcardCount} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 15</span>
+                      </div>
+                    </Link>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
+                        <CheckSquare size={18} color="#05cd99" />
+                        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Quizzes</span>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#05cd99' }}>
+                        {row.quizzes} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 250</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-
-        <div className="animate-fade-in delay-2">
-          <UploadForm />
         </div>
 
       </main>

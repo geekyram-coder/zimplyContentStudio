@@ -1,79 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { UploadCloud, CheckCircle, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
-const AGES = ['5', '6', '7', '8', '9', '10'];
-const SUBJECTS = ['Science', 'Economics', 'History', 'Geography', 'Civics', 'General Knowledge'];
+
 const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes'];
-const FLASHCARD_TYPES = ['Story Card', 'Tap & Reveal Card', 'Guess Card', 'Celebration Card', 'Imagination Card', 'Challenge Card'];
-
-const mockTopics = [
-  'Gravity on Earth',
-  'Gravity discovered by Newton',
-  'What is Gravity? Quiz',
-  'Solar System Planets',
-  'Money Basics',
-  'Supply and Demand',
-  'Ancient Egypt',
-  'Continents Map',
-  'Community Helpers',
-  'Flags of the World'
-];
+const FLASHCARD_TYPES = ['Cover Card', 'Story Card', 'Think Card', 'Guess Card', 'Celebration Card', 'Imagination Card', 'Challenge Card'];
 
 export default function UploadForm() {
-  const [topic, setTopic] = useState('');
-  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
-  const [topicResults, setTopicResults] = useState([]);
+  const navigate = useNavigate();
   
-  const [selectedAges, setSelectedAges] = useState(['5']);
-  const [subject, setSubject] = useState('Science');
-  const [contentType, setContentType] = useState('Flashcards'); // defaulting to Flashcards for better UX flow testing
+  const [contentType, setContentType] = useState('Flashcards');
+  const [metadataJson, setMetadataJson] = useState('');
   
   const [files, setFiles] = useState([]);
   const [groupedCards, setGroupedCards] = useState([]);
   
   const [isUploading, setIsUploading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   
-  const topicRef = useRef(null);
 
-  // Topic Autocomplete Logic
-  useEffect(() => {
-    if (topic.trim() === '') {
-      setTopicResults(mockTopics);
-    } else {
-      setTopicResults(mockTopics.filter(t => t.toLowerCase().includes(topic.toLowerCase())));
-    }
-  }, [topic]);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const toggleAge = (ageVal) => {
-    setSelectedAges(prev => 
-      prev.includes(ageVal) 
-        ? prev.filter(a => a !== ageVal) 
-        : [...prev, ageVal]
-    );
-  };
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (topicRef.current && !topicRef.current.contains(event.target)) {
-        setShowTopicDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // File parsing logic
-  const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
+  const processFiles = (selectedFiles) => {
     setFiles(selectedFiles);
 
     if (contentType === 'Flashcards') {
       let cards = {};
       selectedFiles.forEach(file => {
-        const match = file.name.match(/^(\d+)([fb])?\./i);
+        const match = file.name.match(/^(\d+|t)([fb])?\./i);
         if (match) {
-          const num = match[1];
+          const num = match[1].toLowerCase();
           const side = match[2]?.toLowerCase();
           
           if (!cards[num]) cards[num] = { number: num, type: 'Story Card', files: {}, previews: {} };
@@ -91,21 +49,58 @@ export default function UploadForm() {
             cards[num].previews.single = previewUrl;
           }
         } else {
-          // Unnumbered card fallback
           const randomId = Math.random().toString(36).substr(2, 9);
           cards[randomId] = { number: '?', type: 'Story Card', files: { single: file }, previews: { single: URL.createObjectURL(file) } };
         }
       });
       
       const parsedCards = Object.values(cards).sort((a, b) => {
+        if (a.number === 't') return -1;
+        if (b.number === 't') return 1;
         const numA = parseInt(a.number);
         const numB = parseInt(b.number);
         if (isNaN(numA)) return 1;
         if (isNaN(numB)) return -1;
         return numA - numB;
       });
+
+      parsedCards.forEach((c, idx) => {
+        if (c.number === 't') return;
+        
+        if (c.number === '0') {
+          c.type = 'Cover Card';
+        } else if (idx === parsedCards.length - 1) {
+          c.type = 'Celebration Card';
+        } else if (c.files.front || c.files.back) {
+          c.type = 'Think Card';
+        }
+      });
       
       setGroupedCards(parsedCards);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files) {
+      processFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(Array.from(e.dataTransfer.files));
     }
   };
 
@@ -115,30 +110,110 @@ export default function UploadForm() {
     setGroupedCards(updated);
   };
 
-  const handleSubmit = (e) => {
+  const uploadFileToSupabase = async (file, path) => {
+    const { data, error } = await supabase.storage.from('flashcards').upload(path, file, { cacheControl: '3600', upsert: false });
+    if (error) throw error;
+    const { data: publicUrlData } = supabase.storage.from('flashcards').getPublicUrl(path);
+    return publicUrlData.publicUrl;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) {
       alert("Please select files to upload.");
       return;
     }
-    if (!topic) {
-      alert("Please enter a topic.");
+    
+    if (!metadataJson.trim()) {
+      alert("Please enter the metadata JSON.");
       return;
     }
-    if (selectedAges.length === 0) {
-      alert("Please select at least one Age Group.");
+    
+    let parsedMeta;
+    try {
+      parsedMeta = JSON.parse(metadataJson);
+    } catch (e) {
+      alert("Invalid JSON in metadata field.");
+      return;
+    }
+    
+    if (!parsedMeta.title || parsedMeta.title.trim() === "") {
+      alert("Please enter a valid title in the JSON.");
+      return;
+    }
+
+    if (!parsedMeta.ageApplicability || parsedMeta.ageApplicability.length === 0) {
+      alert("Please include at least one age in ageApplicability array.");
       return;
     }
     
     setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
-      setSuccessMsg(`Successfully uploaded ${files.length} file(s) for "${topic}" (Ages: ${selectedAges.join(', ')}).`);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      if (contentType === 'Flashcards') {
+        const thumbnailCard = groupedCards.find(c => c.number === 't');
+        if (!thumbnailCard || !thumbnailCard.files.single) {
+          throw new Error("Missing thumbnail! Please ensure a file named 't.png' or 't.jpg' is included for the deck thumbnail.");
+        }
+
+        const remainingCards = groupedCards.filter(c => c.number !== 't' && c.number !== '?');
+
+        // 1. Upload Thumbnail
+        const thumbFile = thumbnailCard.files.single;
+        const thumbPath = `thumbnails/${Date.now()}_${thumbFile.name.replace(/\s+/g, '_')}`;
+        const thumbUrl = await uploadFileToSupabase(thumbFile, thumbPath);
+
+        // 2. Insert Deck Record
+        const { data: deckData, error: deckError } = await supabase.from('flashcard_decks').insert({
+          title: parsedMeta.title,
+          thumbnail_url: thumbUrl,
+          subject: parsedMeta.subject || 'Science',
+          applicable_ages: parsedMeta.ageApplicability.map(a => parseInt(a)),
+          category: parsedMeta.category || '',
+          description: parsedMeta.description || ''
+        }).select().single();
+
+        if (deckError) throw deckError;
+        const deckId = deckData.id;
+
+        // 3. Upload Remaining Cards & Insert DB Records
+        const cardInsertions = [];
+        for (const card of remainingCards) {
+          const fileToUpload = card.files.single || card.files.front;
+          if (!fileToUpload) continue;
+
+          const cardPath = `cards/${deckId}_${card.number}_${fileToUpload.name.replace(/\s+/g, '_')}`;
+          const cardUrl = await uploadFileToSupabase(fileToUpload, cardPath);
+
+          cardInsertions.push({
+            deck_id: deckId,
+            image_url: cardUrl,
+            order_index: parseInt(card.number)
+          });
+        }
+
+        if (cardInsertions.length > 0) {
+          const { error: cardsError } = await supabase.from('flashcards').insert(cardInsertions);
+          if (cardsError) throw cardsError;
+        }
+
+        setSuccessMsg(`Successfully uploaded deck "${parsedMeta.title}" with ${cardInsertions.length} cards!`);
+      } else {
+        // Implement logic for Quizzes/Quickbooks later
+        setSuccessMsg(`Uploaded ${files.length} files for ${contentType} (Logic placeholder)`);
+      }
+
       setFiles([]);
       setGroupedCards([]);
-      setTopic('');
       setTimeout(() => setSuccessMsg(''), 4000);
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'An error occurred during upload.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -155,89 +230,59 @@ export default function UploadForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-          
-          <div className="form-group" style={{ marginBottom: 0, position: 'relative' }} ref={topicRef}>
-            <label className="form-label">Topic</label>
-            <input 
-              type="text" 
-              className="form-input" 
-              placeholder="Start typing topic name..."
-              value={topic}
-              onChange={(e) => {
-                setTopic(e.target.value);
-                setShowTopicDropdown(true);
-              }}
-              onFocus={() => setShowTopicDropdown(true)}
-            />
-            {showTopicDropdown && topicResults.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-sm)', maxHeight: '200px', overflowY: 'auto', zIndex: 10, boxShadow: 'var(--shadow-soft)' }}>
-                {topicResults.map(t => (
-                  <div 
-                    key={t} 
-                    style={{ padding: '0.75rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f8fafc' }}
-                    onMouseDown={() => {
-                      setTopic(t);
-                      setShowTopicDropdown(false);
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    {t}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {errorMsg && (
+        <div className="animate-fade-in" style={{ backgroundColor: '#fef2f2', color: 'var(--error)', padding: '1rem', borderRadius: 'var(--radius-sm)', marginBottom: '1.5rem', border: '1px solid #fecaca' }}>
+          {errorMsg}
+        </div>
+      )}
 
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Content Type</label>
             <select className="form-select" value={contentType} onChange={(e) => {
-              setContentType(e.target.value);
-              setFiles([]);
-              setGroupedCards([]);
+              const val = e.target.value;
+              if (val === 'Quickbooks') {
+                navigate('/quickbooks/create');
+              } else {
+                setContentType(val);
+                setFiles([]);
+                setGroupedCards([]);
+              }
             }}>
               {CONTENT_TYPES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Age Groups</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-              {AGES.map(a => (
-                <label key={a} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', backgroundColor: '#f1f5f9', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={selectedAges.includes(a)}
-                    onChange={() => toggleAge(a)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 500 }}>Age {a}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Subject</label>
-            <select className="form-select" value={subject} onChange={(e) => setSubject(e.target.value)}>
-              {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+          <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+            <label className="form-label">Metadata (JSON)</label>
+            <textarea 
+              className="form-input" 
+              style={{ minHeight: '160px', fontFamily: 'monospace', whiteSpace: 'pre', padding: '1rem', resize: 'vertical' }}
+              value={metadataJson}
+              onChange={(e) => setMetadataJson(e.target.value)}
+              placeholder={'{\n  "title": "Enter deck title...",\n  "subject": "e.g. Science",\n  "category": "e.g. Earth & Nature",\n  "ageApplicability": [5, 6],\n  "description": "Enter description here..."\n}'}
+            />
           </div>
           
         </div>
 
         <div className="form-group" style={{ marginTop: '0.5rem' }}>
-          <label className="form-label">Content Files {contentType === 'Flashcards' ? '(Drag multiple PNGs)' : ''}</label>
-          <div style={{
-            border: '2px dashed #cbd5e1',
-            borderRadius: 'var(--radius-md)',
-            padding: '2rem',
-            textAlign: 'center',
-            backgroundColor: '#f8fafc',
-            transition: 'border-color 0.3s'
-          }}>
+          <label className="form-label">Content Files {contentType === 'Flashcards' ? '(Must include t.png for Thumbnail)' : ''}</label>
+          <div 
+            style={{
+              border: `2px dashed ${isDragging ? 'var(--primary)' : '#cbd5e1'}`,
+              borderRadius: 'var(--radius-md)',
+              padding: '2rem',
+              textAlign: 'center',
+              backgroundColor: isDragging ? '#f0f9ff' : '#f8fafc',
+              transition: 'all 0.3s'
+            }}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <input 
               type="file" 
               id="file-upload" 
@@ -253,7 +298,7 @@ export default function UploadForm() {
               <div>
                 <span style={{ color: 'var(--primary)', fontWeight: '600' }}>Click to upload</span> or drag and drop
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                  {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' ? "Upload multiple PNGs (e.g. 1.png, 2f.png, 2b.png)" : "PDF, Image, or JSON")}
+                  {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' ? "Upload t.png (thumbnail) and 0.png, 1.png..." : "PDF, Image, or JSON")}
                 </p>
               </div>
             </label>
@@ -266,14 +311,18 @@ export default function UploadForm() {
             <h3 style={{ fontSize: '1.1rem', color: 'var(--text-main)', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>Flashcard Previews</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {groupedCards.map((card, idx) => (
-                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1.5rem', backgroundColor: card.number === 't' ? '#f0fdf4' : '#f8fafc', borderRadius: 'var(--radius-md)', border: card.number === 't' ? '1px solid #86efac' : '1px solid #e2e8f0' }}>
                   
+                  {card.number === 't' && (
+                    <div style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>Deck Thumbnail Image</div>
+                  )}
+
                   {/* Image Thumbnails */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center' }}>
                     {card.previews.single && (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
                         <img src={card.previews.single} alt={`Card ${card.number}`} style={{ width: '280px', height: '280px', objectFit: 'contain', backgroundColor: 'white', borderRadius: 'var(--radius-sm)', border: '1px solid #cbd5e1', padding: '0.5rem', boxShadow: 'var(--shadow-sm)' }} />
-                        <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>Card {card.number}</span>
+                        <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{card.number === 't' ? 'Thumbnail' : `Card ${card.number}`}</span>
                       </div>
                     )}
                     {card.previews.front && (
@@ -290,18 +339,20 @@ export default function UploadForm() {
                     )}
                   </div>
 
-                  {/* Card Type Dropdown */}
-                  <div style={{ alignSelf: 'center', width: '100%', maxWidth: '300px' }}>
-                    <label className="form-label" style={{ fontSize: '0.9rem', textAlign: 'center', display: 'block' }}>Card Type</label>
-                    <select 
-                      className="form-select" 
-                      style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} 
-                      value={card.type} 
-                      onChange={(e) => updateCardType(idx, e.target.value)}
-                    >
-                      {FLASHCARD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
-                    </select>
-                  </div>
+                  {/* Card Type Dropdown (Only show for actual cards, not thumbnail) */}
+                  {card.number !== 't' && (
+                    <div style={{ alignSelf: 'center', width: '100%', maxWidth: '300px' }}>
+                      <label className="form-label" style={{ fontSize: '0.9rem', textAlign: 'center', display: 'block' }}>Card Type</label>
+                      <select 
+                        className="form-select" 
+                        style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} 
+                        value={card.type || 'Story Card'} 
+                        onChange={(e) => updateCardType(idx, e.target.value)}
+                      >
+                        {FLASHCARD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </div>
+                  )}
                   
                 </div>
               ))}
@@ -310,7 +361,9 @@ export default function UploadForm() {
         )}
 
         <button type="submit" className="btn-primary" style={{ width: '100%', padding: '1rem' }} disabled={isUploading}>
-          {isUploading ? 'Uploading to Supabase...' : 'Upload Content'}
+          {isUploading ? (
+            <><Loader2 className="animate-spin" size={20} /> Uploading to Supabase...</>
+          ) : 'Upload Content'}
         </button>
       </form>
     </div>

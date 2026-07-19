@@ -1,27 +1,47 @@
 import React, { useState } from 'react';
 import { Lock, User, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    // Reverting to the requested hardcoded login logic
     if (username === 'admin' && password === 'admin@123') {
-      setError('');
+      // Attempt to log into Supabase quietly in the background so uploads work with RLS.
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: 'admin@zimplykids.com', 
+        password: password,
+      });
+
+      if (authError) {
+        setError('Database Auth Failed: ' + authError.message);
+        setLoading(false);
+        return;
+      }
+      
+      // Only proceed if Supabase successfully returned a session token
       onLogin();
     } else {
       setError('Invalid username or password');
     }
+    
+    setLoading(false);
   };
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%' }}>
       <div className="glass animate-fade-in" style={{ padding: '3rem', width: '100%', maxWidth: '400px', margin: '1rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 className="text-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Simply Kids</h1>
+          <h1 className="text-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Zimply Kids</h1>
           <p style={{ color: 'var(--text-muted)' }}>Content Studio Login</p>
         </div>
 
@@ -77,8 +97,8 @@ export default function Login({ onLogin }) {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
-            Sign In
+          <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
+            {loading ? 'Processing...' : 'Sign In'}
           </button>
         </form>
       </div>
