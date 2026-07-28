@@ -181,17 +181,45 @@ export default function UploadForm() {
         // 3. Upload Remaining Cards & Insert DB Records
         const cardInsertions = [];
         for (const card of remainingCards) {
-          const fileToUpload = card.files.single || card.files.front;
-          if (!fileToUpload) continue;
+          const dbCardType = (card.type || 'Story Card').toLowerCase().replace(' ', '_');
 
-          const cardPath = `cards/${deckId}_${card.number}_${fileToUpload.name.replace(/\s+/g, '_')}`;
-          const cardUrl = await uploadFileToSupabase(fileToUpload, cardPath);
+          if (card.files.single) {
+            const fileToUpload = card.files.single;
+            const cardPath = `cards/${deckId}_${card.number}_${fileToUpload.name.replace(/\s+/g, '_')}`;
+            const cardUrl = await uploadFileToSupabase(fileToUpload, cardPath);
 
-          cardInsertions.push({
-            deck_id: deckId,
-            image_url: cardUrl,
-            order_index: parseInt(card.number)
-          });
+            cardInsertions.push({
+              deck_id: deckId,
+              image_url: cardUrl,
+              order_index: parseFloat(card.number),
+              card_type: dbCardType
+            });
+          } else {
+            if (card.files.front) {
+              const fileToUpload = card.files.front;
+              const cardPath = `cards/${deckId}_${card.number}_f_${fileToUpload.name.replace(/\s+/g, '_')}`;
+              const cardUrl = await uploadFileToSupabase(fileToUpload, cardPath);
+
+              cardInsertions.push({
+                deck_id: deckId,
+                image_url: cardUrl,
+                order_index: parseFloat(`${card.number}.1`),
+                card_type: dbCardType
+              });
+            }
+            if (card.files.back) {
+              const fileToUpload = card.files.back;
+              const cardPath = `cards/${deckId}_${card.number}_b_${fileToUpload.name.replace(/\s+/g, '_')}`;
+              const cardUrl = await uploadFileToSupabase(fileToUpload, cardPath);
+
+              cardInsertions.push({
+                deck_id: deckId,
+                image_url: cardUrl,
+                order_index: parseFloat(`${card.number}.2`),
+                card_type: dbCardType
+              });
+            }
+          }
         }
 
         if (cardInsertions.length > 0) {
