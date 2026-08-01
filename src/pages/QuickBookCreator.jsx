@@ -178,8 +178,7 @@ export default function QuickBookCreator() {
   const [thumbnailObj, setThumbnailObj] = useState(null);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
 
-  // ADDED audioWordOffset to page state to track skipped words
-  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, audioWordOffset: 0, boxes: [], assemblyJsonStr: '' }]);
+  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
@@ -213,7 +212,7 @@ export default function QuickBookCreator() {
 
   const goToNextPage = () => {
     if (currentPageIndex === pages.length - 1) {
-      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, audioWordOffset: 0, boxes: [], assemblyJsonStr: '' }]);
+      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
     }
     setCurrentPageIndex(prev => prev + 1);
     setActiveBoxId(null);
@@ -381,9 +380,21 @@ export default function QuickBookCreator() {
         const assemblyData = JSON.parse(pageData.assemblyJsonStr);
         if (assemblyData.words) {
           const rawWords = assemblyData.words;
-          
-          // Apply the user-defined offset to skip baked-in title words
-          let timeIndex = parseInt(pageData.audioWordOffset) || 0;
+          let timeIndex = 0;
+
+          // NEW: Auto-detect "Chapter [Number]" in the first 15 words to skip the baked-in title
+          const searchLimit = Math.min(rawWords.length - 1, 15);
+          for (let i = 0; i < searchLimit; i++) {
+            const currentWordClean = rawWords[i].text.toLowerCase().replace(/[^a-z]/g, '');
+            if (currentWordClean === 'chapter') {
+              const nextWordClean = rawWords[i + 1].text.replace(/[^0-9]/g, '');
+              // If the next word contains a number (like "1" or "1.")
+              if (nextWordClean !== '') {
+                timeIndex = i + 2; // Move the index safely past "Chapter" and the Number
+                break;
+              }
+            }
+          }
 
           const processBlock = (box, localSideIdx, blockIdx) => {
             const words = box.text.split(/[\s\n]+/);
@@ -392,11 +403,11 @@ export default function QuickBookCreator() {
               if (timeIndex < rawWords.length) {
                 const truePageIndex = (spreadIndex * 2) + localSideIdx;
                 
-                // If there is NO offset, force the very first word to start at 0ms.
-                // If there IS an offset, respect the actual timestamp so it waits for the title to finish.
                 const isFirstBookWord = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0);
-                const hasNoOffset = (!pageData.audioWordOffset || pageData.audioWordOffset === 0);
+                const hasNoOffset = (timeIndex === 0);
                 
+                // If there's no chapter intro offset, start the very first word at 0ms.
+                // Otherwise, use the actual timestamp so it perfectly waits out the title reading.
                 const time = (isFirstBookWord && hasNoOffset) ? 0 : rawWords[timeIndex].start;
                 
                 timingArray.push({ 
@@ -744,18 +755,6 @@ export default function QuickBookCreator() {
             )}
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#666', marginBottom: '6px' }}>Skip Audio Words (e.g. baked-in Title)</label>
-            <p style={{ fontSize: '9px', color: '#888', marginBottom: '6px', lineHeight: '1.2' }}>If the audio reads a title that isn't in a text box, enter the number of title words here to shift the highlighting to the correct start word.</p>
-            <input 
-              type="number" 
-              min="0" 
-              value={currentPage.audioWordOffset || 0} 
-              onChange={(e) => updateCurrentPage({ audioWordOffset: parseInt(e.target.value) || 0 })} 
-              style={{ width: '100%', padding: '6px', fontSize: '12px', border: '1px solid #ccc', borderRadius: '4px' }} 
-            />
-          </div>
-
           <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the AssemblyAI JSON here.</p>
           <textarea 
             style={{ width: '100%', height: '100px', fontFamily: 'monospace', fontSize: '11px', padding: '8px' }}
@@ -768,7 +767,7 @@ export default function QuickBookCreator() {
         <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
           <div>
             <h3 style={{ fontSize: '14px' }}>2. DB Payload Output (Current Spread)</h3>
-            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Notice how the timing array respects your offset!</p>
+            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>The timing array now auto-skips baked-in "Chapter" titles!</p>
             
             <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff00', padding: '15px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'pre-wrap', wordWrap: 'break-word', maxHeight: '300px', overflowY: 'auto' }}>
               {`// --- left_text & right_text ---\n`}
