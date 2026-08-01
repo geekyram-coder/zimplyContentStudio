@@ -183,7 +183,8 @@ export default function QuickBookCreator() {
   const [thumbnailObj, setThumbnailObj] = useState(null);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
 
-  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, boxes: [], assemblyJsonStr: '' }]);
+  // Added audioUrl and audioFileObj to initial page state
+  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
@@ -198,8 +199,12 @@ export default function QuickBookCreator() {
     pagesRef.current = pages;
   }, [pages]);
 
+  // Clean up ALL object URLs (images and audio) to prevent memory leaks
   useEffect(() => {
-    return () => pagesRef.current.forEach(p => { if (p.bgImage) URL.revokeObjectURL(p.bgImage); });
+    return () => pagesRef.current.forEach(p => { 
+      if (p.bgImage) URL.revokeObjectURL(p.bgImage); 
+      if (p.audioUrl) URL.revokeObjectURL(p.audioUrl);
+    });
   }, []);
 
   useEffect(() => {
@@ -214,7 +219,7 @@ export default function QuickBookCreator() {
 
   const goToNextPage = () => {
     if (currentPageIndex === pages.length - 1) {
-      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, boxes: [], assemblyJsonStr: '' }]);
+      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
     }
     setCurrentPageIndex(prev => prev + 1);
     setActiveBoxId(null);
@@ -411,7 +416,8 @@ export default function QuickBookCreator() {
       leftText, 
       rightText, 
       timingArray, 
-      imageUrl: pageData.fileObj ? "FILE_WILL_UPLOAD_TO_STORAGE" : "PLACEHOLDER_URL" 
+      imageUrl: pageData.fileObj ? "FILE_WILL_UPLOAD_TO_STORAGE" : "PLACEHOLDER_URL",
+      audioUrl: pageData.audioFileObj ? "AUDIO_WILL_UPLOAD_TO_STORAGE" : "PLACEHOLDER_AUDIO_URL"
     };
   }, []);
 
@@ -469,13 +475,16 @@ export default function QuickBookCreator() {
       for (let i = 0; i < pages.length; i++) {
         const p = pages[i];
         const extracted = extractPageData(p, i);
-        let finalImageUrl = extracted.imageUrl;
+        
+        let finalImageUrl = "";
+        let finalAudioUrl = "";
 
+        // 1. Upload Background Image
         if (p.fileObj) {
            const fileExt = p.fileObj.name.split('.').pop();
            const fileName = `${qbData.id}-page-${i}.${fileExt}`;
            
-           const { data: uploadData, error: uploadError } = await supabase.storage
+           const { error: uploadError } = await supabase.storage
              .from('quickbook_images')
              .upload(fileName, p.fileObj);
              
@@ -488,13 +497,31 @@ export default function QuickBookCreator() {
            finalImageUrl = publicUrlData.publicUrl;
         }
 
+        // 2. Upload Audio File (NEW)
+        if (p.audioFileObj) {
+           const audioExt = p.audioFileObj.name.split('.').pop();
+           const audioName = `${qbData.id}-audio-${i}.${audioExt}`;
+           
+           const { error: audioUploadError } = await supabase.storage
+             .from('quickbook_audio') // Ensure this bucket exists in Supabase!
+             .upload(audioName, p.audioFileObj);
+             
+           if (audioUploadError) throw audioUploadError;
+           
+           const { data: publicAudioUrlData } = supabase.storage
+             .from('quickbook_audio')
+             .getPublicUrl(audioName);
+             
+           finalAudioUrl = publicAudioUrlData.publicUrl;
+        }
+
         pagesPayload.push({
           quickbook_id: qbData.id,
           page_index: i,
           image_url: finalImageUrl,
           left_text: extracted.leftText,
           right_text: extracted.rightText,
-          audio_url: "",
+          audio_url: finalAudioUrl,
           audio_timings: extracted.timingArray
         });
       }
@@ -705,11 +732,29 @@ export default function QuickBookCreator() {
       {/* RIGHT PANEL */}
       <div style={{ width: '380px', backgroundColor: '#fff', borderLeft: '1px solid #ccc', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #eee', flex: '0 0 auto' }}>
-          <h3 style={{ fontSize: '14px' }}>1. AssemblyAI JSON (Current Spread)</h3>
-          <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the JSON for the audio covering *this* 2-page spread.</p>
+          <h3 style={{ fontSize: '14px', marginBottom: '15px' }}>1. Spread Audio & Timings</h3>
+          
+          {/* NEW: AUDIO UPLOAD UI */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#666', marginBottom: '6px' }}>Upload Audio for this Spread</label>
+            <input type="file" accept="audio/*" onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                if (currentPage.audioUrl) URL.revokeObjectURL(currentPage.audioUrl);
+                const objectUrl = URL.createObjectURL(file);
+                updateCurrentPage({ audioUrl: objectUrl, audioFileObj: file });
+              }
+            }} style={{ width: '100%', fontSize: '11px', marginBottom: '8px' }} />
+            
+            {currentPage.audioUrl && (
+              <audio controls src={currentPage.audioUrl} style={{ width: '100%', height: '35px', marginTop: '4px' }} />
+            )}
+          </div>
+
+          <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the AssemblyAI JSON here.</p>
           <textarea 
             style={{ width: '100%', height: '100px', fontFamily: 'monospace', fontSize: '11px', padding: '8px' }}
-            placeholder='{"words": [{"text": "The", "start": 97} ... ]}'
+            placeholder='{"words": [{"text": "The", "start": 185} ... ]}'
             value={currentPage.assemblyJsonStr}
             onChange={(e) => updateCurrentPage({ assemblyJsonStr: e.target.value })}
           />
@@ -722,7 +767,7 @@ export default function QuickBookCreator() {
             
             <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff00', padding: '15px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'pre-wrap', wordWrap: 'break-word', maxHeight: '300px', overflowY: 'auto' }}>
               {`// --- left_text & right_text ---\n`}
-              {JSON.stringify({ imageUrl: liveCurrentPagePreview.imageUrl, leftText: liveCurrentPagePreview.leftText, rightText: liveCurrentPagePreview.rightText }, null, 2)}
+              {JSON.stringify({ imageUrl: liveCurrentPagePreview.imageUrl, audioUrl: liveCurrentPagePreview.audioUrl, leftText: liveCurrentPagePreview.leftText, rightText: liveCurrentPagePreview.rightText }, null, 2)}
               {`\n\n// --- audio_timings ARRAY ---\n`}
               {JSON.stringify(liveCurrentPagePreview.timingArray, null, 2)}
             </pre>
