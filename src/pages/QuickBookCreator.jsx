@@ -80,7 +80,6 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
     };
   }, [isDragging, isResizing, box.id, box.w, box.x, updateBox]);
 
-  // Shared styles ensure the <div> and <textarea> overlap perfectly
   const commonStyles = {
     width: '100%',
     fontFamily: `'${box.fontFamily}', sans-serif`,
@@ -91,7 +90,6 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
     boxSizing: 'border-box',
   };
 
-  // Parses raw text into styled word spans
   const renderColoredText = () => {
     if (!box.text) return null;
     const wordRegex = /\S+|\s+/g;
@@ -128,8 +126,6 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
       )}
       
       <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        
-        {/* VISUAL LAYER: Shows the colorful words when not editing */}
         <div
           onMouseDown={!isEditing ? startDrag : undefined}
           onDoubleClick={!isEditing ? handleDoubleClick : undefined}
@@ -138,7 +134,7 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             whiteSpace: 'pre-wrap', wordWrap: 'break-word',
             cursor: isEditing ? 'text' : 'move',
-            opacity: isEditing ? 0 : 1, // Hides when typing
+            opacity: isEditing ? 0 : 1,
             pointerEvents: isEditing ? 'none' : 'auto',
             zIndex: 1
           }}
@@ -146,20 +142,19 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
           {renderColoredText()}
         </div>
 
-        {/* INPUT LAYER: Pure textarea for fast editing. Overlays exactly on top of visual layer */}
         <textarea
           ref={textareaRef} 
           value={box.text} 
           onChange={(e) => updateBox(box.id, { text: e.target.value })}
           onBlur={() => setIsEditing(false)} 
           onSelect={handleSelectionChange}
-          onKeyUp={handleSelectionChange} // Catches shift+arrow keyboard selections
+          onKeyUp={handleSelectionChange}
           style={{
             ...commonStyles,
-            position: 'relative', // Forces the parent container to grow dynamically
+            position: 'relative',
             background: 'transparent', border: 'none', outline: 'none', resize: 'none', 
             color: box.color || '#000000', overflow: 'hidden', 
-            opacity: isEditing ? 1 : 0, // Appears when typing
+            opacity: isEditing ? 1 : 0,
             pointerEvents: isEditing ? 'auto' : 'none',
             zIndex: 2
           }}
@@ -183,8 +178,8 @@ export default function QuickBookCreator() {
   const [thumbnailObj, setThumbnailObj] = useState(null);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
 
-  // Added audioUrl and audioFileObj to initial page state
-  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
+  // ADDED audioWordOffset to page state to track skipped words
+  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, audioWordOffset: 0, boxes: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
@@ -199,7 +194,6 @@ export default function QuickBookCreator() {
     pagesRef.current = pages;
   }, [pages]);
 
-  // Clean up ALL object URLs (images and audio) to prevent memory leaks
   useEffect(() => {
     return () => pagesRef.current.forEach(p => { 
       if (p.bgImage) URL.revokeObjectURL(p.bgImage); 
@@ -219,7 +213,7 @@ export default function QuickBookCreator() {
 
   const goToNextPage = () => {
     if (currentPageIndex === pages.length - 1) {
-      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
+      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, audioWordOffset: 0, boxes: [], assemblyJsonStr: '' }]);
     }
     setCurrentPageIndex(prev => prev + 1);
     setActiveBoxId(null);
@@ -280,7 +274,6 @@ export default function QuickBookCreator() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeBoxId, removeBox, duplicateBox]);
 
-  // --- HIGHLIGHTING LOGIC ---
   const applyHighlight = () => {
     if (!activeBoxId || activeSelection.boxId !== activeBoxId) return;
     const box = currentPage.boxes.find(b => b.id === activeBoxId);
@@ -297,7 +290,6 @@ export default function QuickBookCreator() {
     let match;
     let wordCount = 0;
 
-    // Map string coordinates to actual word positions
     while ((match = wordRegex.exec(box.text)) !== null) {
       const wordStart = match.index;
       const wordEnd = wordStart + match[0].length;
@@ -346,7 +338,6 @@ export default function QuickBookCreator() {
         else rightBoxes.push(box);
       });
 
-    // Weaves the custom colors into the final HTML output for React Native
     const formatTextWithColors = (box) => {
       const text = box.text || "";
       const wordColors = box.wordColors || {};
@@ -389,18 +380,30 @@ export default function QuickBookCreator() {
       if (pageData.assemblyJsonStr.trim() !== '') {
         const assemblyData = JSON.parse(pageData.assemblyJsonStr);
         if (assemblyData.words) {
-          const rawTimestamps = assemblyData.words.map(w => w.start);
-          let timeIndex = 0;
+          const rawWords = assemblyData.words;
+          
+          // Apply the user-defined offset to skip baked-in title words
+          let timeIndex = parseInt(pageData.audioWordOffset) || 0;
 
-          // Pure raw text is used for audio mapping so the HTML tags don't corrupt the word count
           const processBlock = (box, localSideIdx, blockIdx) => {
             const words = box.text.split(/[\s\n]+/);
             words.forEach((word, wordIdx) => {
               if (word === '-' || word.trim() === '') return;
-              if (timeIndex < rawTimestamps.length) {
+              if (timeIndex < rawWords.length) {
                 const truePageIndex = (spreadIndex * 2) + localSideIdx;
-                const time = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0) ? 0 : rawTimestamps[timeIndex];
-                timingArray.push({ id: `word-${truePageIndex}-${blockIdx}-${wordIdx}`, time });
+                
+                // If there is NO offset, force the very first word to start at 0ms.
+                // If there IS an offset, respect the actual timestamp so it waits for the title to finish.
+                const isFirstBookWord = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0);
+                const hasNoOffset = (!pageData.audioWordOffset || pageData.audioWordOffset === 0);
+                
+                const time = (isFirstBookWord && hasNoOffset) ? 0 : rawWords[timeIndex].start;
+                
+                timingArray.push({ 
+                  id: `word-${truePageIndex}-${blockIdx}-${wordIdx}`, 
+                  time: time,
+                  word: word 
+                });
                 timeIndex++;
               }
             });
@@ -479,7 +482,6 @@ export default function QuickBookCreator() {
         let finalImageUrl = "";
         let finalAudioUrl = "";
 
-        // 1. Upload Background Image
         if (p.fileObj) {
            const fileExt = p.fileObj.name.split('.').pop();
            const fileName = `${qbData.id}-page-${i}.${fileExt}`;
@@ -497,13 +499,12 @@ export default function QuickBookCreator() {
            finalImageUrl = publicUrlData.publicUrl;
         }
 
-        // 2. Upload Audio File (NEW)
         if (p.audioFileObj) {
            const audioExt = p.audioFileObj.name.split('.').pop();
            const audioName = `${qbData.id}-audio-${i}.${audioExt}`;
            
            const { error: audioUploadError } = await supabase.storage
-             .from('quickbook_audio') // Ensure this bucket exists in Supabase!
+             .from('quickbook_audio')
              .upload(audioName, p.audioFileObj);
              
            if (audioUploadError) throw audioUploadError;
@@ -622,7 +623,6 @@ export default function QuickBookCreator() {
               </select>
             </div>
 
-            {/* BASE COLOR PICKER */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '8px' }}>
                 <Palette size={14} /> Default Box Color
@@ -633,7 +633,6 @@ export default function QuickBookCreator() {
               </div>
             </div>
 
-            {/* WORD HIGHLIGHTER TOOL */}
             <div style={{ marginTop: '15px', padding: '12px', backgroundColor: '#eef2f5', borderRadius: '6px', border: '1px solid #dce4e8' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }}>
                 Highlight Specific Words
@@ -663,13 +662,10 @@ export default function QuickBookCreator() {
         )}
       </div>
 
-      {/* CENTER PANEL: Canvas & Navigation */}
+      {/* CENTER PANEL */}
       <div style={{ flex: 1, padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-        
         <h2 style={{ marginBottom: '20px' }}>Spread Editor (600x400)</h2>
-        
         <div style={{ width: '840px', height: '560px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '20px 0' }}>
-          
           <div 
             onMouseDown={(e) => {
               if (e.target === e.currentTarget || e.target.id === 'canvas-center-line') setActiveBoxId(null);
@@ -704,7 +700,6 @@ export default function QuickBookCreator() {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
           <button onClick={addBox} style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#123C52', color: 'white', border: 'none', borderRadius: '4px' }}>
             + Add Text Box
@@ -715,7 +710,6 @@ export default function QuickBookCreator() {
           </label>
         </div>
 
-        {/* Fast Navigation */}
         <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', gap: '20px', backgroundColor: '#fff', padding: '10px 20px', borderRadius: '30px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
           <button onClick={goToPrevPage} disabled={currentPageIndex === 0} style={{ display: 'flex', alignItems: 'center', border: 'none', background: 'none', cursor: currentPageIndex === 0 ? 'not-allowed' : 'pointer', opacity: currentPageIndex === 0 ? 0.3 : 1, fontWeight: 'bold' }}>
             <ChevronLeft size={20} /> Prev Spread
@@ -734,7 +728,6 @@ export default function QuickBookCreator() {
         <div style={{ padding: '20px', borderBottom: '1px solid #eee', flex: '0 0 auto' }}>
           <h3 style={{ fontSize: '14px', marginBottom: '15px' }}>1. Spread Audio & Timings</h3>
           
-          {/* NEW: AUDIO UPLOAD UI */}
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#666', marginBottom: '6px' }}>Upload Audio for this Spread</label>
             <input type="file" accept="audio/*" onChange={(e) => {
@@ -751,10 +744,22 @@ export default function QuickBookCreator() {
             )}
           </div>
 
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#666', marginBottom: '6px' }}>Skip Audio Words (e.g. baked-in Title)</label>
+            <p style={{ fontSize: '9px', color: '#888', marginBottom: '6px', lineHeight: '1.2' }}>If the audio reads a title that isn't in a text box, enter the number of title words here to shift the highlighting to the correct start word.</p>
+            <input 
+              type="number" 
+              min="0" 
+              value={currentPage.audioWordOffset || 0} 
+              onChange={(e) => updateCurrentPage({ audioWordOffset: parseInt(e.target.value) || 0 })} 
+              style={{ width: '100%', padding: '6px', fontSize: '12px', border: '1px solid #ccc', borderRadius: '4px' }} 
+            />
+          </div>
+
           <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the AssemblyAI JSON here.</p>
           <textarea 
             style={{ width: '100%', height: '100px', fontFamily: 'monospace', fontSize: '11px', padding: '8px' }}
-            placeholder='{"words": [{"text": "The", "start": 185} ... ]}'
+            placeholder='{"words": [{"text": "The", "start": 97} ... ]}'
             value={currentPage.assemblyJsonStr}
             onChange={(e) => updateCurrentPage({ assemblyJsonStr: e.target.value })}
           />
@@ -763,7 +768,7 @@ export default function QuickBookCreator() {
         <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
           <div>
             <h3 style={{ fontSize: '14px' }}>2. DB Payload Output (Current Spread)</h3>
-            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Notice how custom colors generate internal &lt;span&gt; tags!</p>
+            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Notice how the timing array respects your offset!</p>
             
             <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff00', padding: '15px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'pre-wrap', wordWrap: 'break-word', maxHeight: '300px', overflowY: 'auto' }}>
               {`// --- left_text & right_text ---\n`}
