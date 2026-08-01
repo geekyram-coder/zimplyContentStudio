@@ -193,9 +193,14 @@ export default function QuickBookCreator() {
   const currentPage = pages[currentPageIndex];
   const activeBox = currentPage.boxes.find(b => b.id === activeBoxId);
 
+  const pagesRef = useRef(pages);
   useEffect(() => {
-    return () => pages.forEach(p => { if (p.bgImage) URL.revokeObjectURL(p.bgImage); });
+    pagesRef.current = pages;
   }, [pages]);
+
+  useEffect(() => {
+    return () => pagesRef.current.forEach(p => { if (p.bgImage) URL.revokeObjectURL(p.bgImage); });
+  }, []);
 
   useEffect(() => {
     return () => {
