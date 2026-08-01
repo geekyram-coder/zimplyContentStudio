@@ -12,7 +12,6 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
   const actionRef = useRef({ startX: 0, startY: 0, initialX: box.x, initialY: box.y, initialW: box.w });
   const textareaRef = useRef(null);
 
-  // Sync textarea height to match content
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = '0px'; 
@@ -382,15 +381,13 @@ export default function QuickBookCreator() {
           const rawWords = assemblyData.words;
           let timeIndex = 0;
 
-          // NEW: Auto-detect "Chapter [Number]" in the first 15 words to skip the baked-in title
           const searchLimit = Math.min(rawWords.length - 1, 15);
           for (let i = 0; i < searchLimit; i++) {
             const currentWordClean = rawWords[i].text.toLowerCase().replace(/[^a-z]/g, '');
             if (currentWordClean === 'chapter') {
               const nextWordClean = rawWords[i + 1].text.replace(/[^0-9]/g, '');
-              // If the next word contains a number (like "1" or "1.")
               if (nextWordClean !== '') {
-                timeIndex = i + 2; // Move the index safely past "Chapter" and the Number
+                timeIndex = i + 2; 
                 break;
               }
             }
@@ -402,17 +399,17 @@ export default function QuickBookCreator() {
               if (word === '-' || word.trim() === '') return;
               if (timeIndex < rawWords.length) {
                 const truePageIndex = (spreadIndex * 2) + localSideIdx;
-                
-                const isFirstBookWord = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0);
                 const hasNoOffset = (timeIndex === 0);
+                const isFirstBookWord = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0);
                 
-                // If there's no chapter intro offset, start the very first word at 0ms.
-                // Otherwise, use the actual timestamp so it perfectly waits out the title reading.
-                const time = (isFirstBookWord && hasNoOffset) ? 0 : rawWords[timeIndex].start;
+                // Extract BOTH start and end times for flawless DOM syncing
+                const sTime = (isFirstBookWord && hasNoOffset) ? 0 : rawWords[timeIndex].start;
+                const eTime = rawWords[timeIndex].end;
                 
                 timingArray.push({ 
                   id: `word-${truePageIndex}-${blockIdx}-${wordIdx}`, 
-                  time: time,
+                  startTime: sTime,
+                  endTime: eTime,
                   word: word 
                 });
                 timeIndex++;
@@ -767,7 +764,7 @@ export default function QuickBookCreator() {
         <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
           <div>
             <h3 style={{ fontSize: '14px' }}>2. DB Payload Output (Current Spread)</h3>
-            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>The timing array now auto-skips baked-in "Chapter" titles!</p>
+            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>The timing array now accurately captures Start & End times!</p>
             
             <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff00', padding: '15px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'pre-wrap', wordWrap: 'break-word', maxHeight: '300px', overflowY: 'auto' }}>
               {`// --- left_text & right_text ---\n`}
