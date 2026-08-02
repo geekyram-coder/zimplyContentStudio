@@ -3,6 +3,92 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
 
+// --- HELPER COMPONENT: DRAGGABLE TITLE MASK ---
+const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [resizeMode, setResizeMode] = useState(null); 
+  
+  const actionRef = useRef({ startX: 0, startY: 0, initialX: mask.x, initialY: mask.y, initialW: mask.w, initialH: mask.h });
+
+  const startDrag = (e) => {
+    e.stopPropagation();
+    setActiveMask(mask.id);
+    setIsDragging(true);
+    actionRef.current = { startX: e.clientX, startY: e.clientY, initialX: mask.x, initialY: mask.y };
+  };
+
+  const startResize = (e, mode) => {
+    e.stopPropagation();
+    setActiveMask(mask.id);
+    setResizeMode(mode);
+    actionRef.current = { startX: e.clientX, startY: e.clientY, initialW: mask.w, initialH: mask.h };
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (isDragging) {
+        const dx = e.clientX - actionRef.current.startX;
+        const dy = e.clientY - actionRef.current.startY;
+        updateMask(mask.id, {
+          x: Math.max(0, Math.min(600 - mask.w, actionRef.current.initialX + dx)),
+          y: Math.max(0, Math.min(400 - mask.h, actionRef.current.initialY + dy)),
+        });
+      } else if (resizeMode) {
+        const dx = e.clientX - actionRef.current.startX;
+        const dy = e.clientY - actionRef.current.startY;
+        let newW = mask.w;
+        let newH = mask.h;
+        if (resizeMode.includes('e')) newW = Math.max(20, Math.min(600 - mask.x, actionRef.current.initialW + dx));
+        if (resizeMode.includes('s')) newH = Math.max(20, Math.min(400 - mask.y, actionRef.current.initialH + dy));
+        updateMask(mask.id, { w: newW, h: newH });
+      }
+    };
+    const onMouseUp = () => { setIsDragging(false); setResizeMode(null); };
+    
+    if (isDragging || resizeMode) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isDragging, resizeMode, mask.id, mask.w, mask.h, mask.x, mask.y, updateMask]);
+
+  return (
+    <div
+      onMouseDown={(e) => { e.stopPropagation(); setActiveMask(mask.id); }}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'absolute', left: mask.x, top: mask.y, width: mask.w, height: mask.h,
+        border: isActive ? '2px solid #e74c3c' : '2px dashed rgba(231, 76, 60, 0.6)',
+        backgroundColor: isActive ? 'rgba(231, 76, 60, 0.25)' : 'rgba(231, 76, 60, 0.1)',
+        zIndex: isActive ? 50 : 15, boxSizing: 'border-box', cursor: 'move'
+      }}
+      onMouseDownCapture={startDrag}
+    >
+      <div style={{ position: 'absolute', top: 2, left: 4, color: '#e74c3c', fontSize: '10px', fontWeight: 'bold', pointerEvents: 'none' }}>
+        Title Mask
+      </div>
+
+      {isActive && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); removeMask(mask.id); }} 
+          style={{ position: 'absolute', top: '-26px', right: '-2px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' }}
+        >Delete</button>
+      )}
+      
+      {isActive && (
+        <>
+          <div onMouseDown={(e) => startResize(e, 'e')} style={{ position: 'absolute', top: 0, bottom: 0, right: '-5px', width: '10px', cursor: 'ew-resize' }} />
+          <div onMouseDown={(e) => startResize(e, 's')} style={{ position: 'absolute', left: 0, right: 0, bottom: '-5px', height: '10px', cursor: 'ns-resize' }} />
+          <div onMouseDown={(e) => startResize(e, 'se')} style={{ position: 'absolute', bottom: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%' }} />
+        </>
+      )}
+    </div>
+  );
+};
+
 // --- HELPER COMPONENT: DRAGGABLE TEXT BOX ---
 const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setActiveSelection }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -115,7 +201,7 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
         position: 'absolute', left: box.x, top: box.y, width: box.w,
         border: isActive ? (isEditing ? '1px solid #26B8F5' : '1px dashed #26B8F5') : '1px solid transparent',
         backgroundColor: isActive ? (isEditing ? 'white' : 'rgba(255, 255, 255, 0.4)') : 'transparent',
-        zIndex: isActive ? 50 : 10, boxSizing: 'border-box'
+        zIndex: isActive ? 49 : 10, boxSizing: 'border-box'
       }}
     >
       {isActive && !isEditing && (
@@ -178,15 +264,18 @@ export default function QuickBookCreator() {
   const [thumbnailObj, setThumbnailObj] = useState(null);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
 
-  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
+  // Added masks array to the page state
+  const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
+  const [activeMaskId, setActiveMaskId] = useState(null);
   const [activeSelection, setActiveSelection] = useState({ start: 0, end: 0, boxId: null });
   const [highlightColor, setHighlightColor] = useState('#e74c3c');
 
   const currentPage = pages[currentPageIndex];
   const activeBox = currentPage.boxes.find(b => b.id === activeBoxId);
+  const activeMask = (currentPage.masks || []).find(m => m.id === activeMaskId);
 
   const pagesRef = useRef(pages);
   useEffect(() => {
@@ -212,10 +301,11 @@ export default function QuickBookCreator() {
 
   const goToNextPage = () => {
     if (currentPageIndex === pages.length - 1) {
-      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], assemblyJsonStr: '' }]);
+      setPages(prev => [...prev, { id: `page-${Date.now()}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' }]);
     }
     setCurrentPageIndex(prev => prev + 1);
     setActiveBoxId(null);
+    setActiveMaskId(null);
     setActiveSelection({ start: 0, end: 0, boxId: null });
   };
 
@@ -223,6 +313,7 @@ export default function QuickBookCreator() {
     if (currentPageIndex > 0) {
       setCurrentPageIndex(prev => prev - 1);
       setActiveBoxId(null);
+      setActiveMaskId(null);
       setActiveSelection({ start: 0, end: 0, boxId: null });
     }
   };
@@ -241,15 +332,33 @@ export default function QuickBookCreator() {
     const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 14, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordSpacingPx: 4, wordColors: {} };
     updateCurrentPage({ boxes: [...currentPage.boxes, newBox] });
     setActiveBoxId(newId);
+    setActiveMaskId(null);
+  };
+
+  const addMask = () => {
+    const newId = 'mask-' + Date.now().toString();
+    const newMask = { id: newId, x: 100, y: 100, w: 250, h: 80 }; // Default size for a mask
+    updateCurrentPage({ masks: [...(currentPage.masks || []), newMask] });
+    setActiveMaskId(newId);
+    setActiveBoxId(null);
   };
 
   const updateBox = useCallback((id, updates) => {
     updateCurrentPage({ boxes: currentPage.boxes.map(b => b.id === id ? { ...b, ...updates } : b) });
   }, [currentPage, updateCurrentPage]);
 
+  const updateMask = useCallback((id, updates) => {
+    updateCurrentPage({ masks: (currentPage.masks || []).map(m => m.id === id ? { ...m, ...updates } : m) });
+  }, [currentPage, updateCurrentPage]);
+
   const removeBox = useCallback((id) => {
     updateCurrentPage({ boxes: currentPage.boxes.filter(b => b.id !== id) });
     setActiveBoxId(prev => (prev === id ? null : prev));
+  }, [currentPage, updateCurrentPage]);
+
+  const removeMask = useCallback((id) => {
+    updateCurrentPage({ masks: (currentPage.masks || []).filter(m => m.id !== id) });
+    setActiveMaskId(prev => (prev === id ? null : prev));
   }, [currentPage, updateCurrentPage]);
 
   const duplicateBox = useCallback((id) => {
@@ -259,6 +368,7 @@ export default function QuickBookCreator() {
     const newBox = { ...sourceBox, id: newId, x: Math.min(sourceBox.x + 20, 600 - sourceBox.w), y: Math.min(sourceBox.y + 20, 400 - 30) };
     updateCurrentPage({ boxes: [...currentPage.boxes, newBox] });
     setActiveBoxId(newId);
+    setActiveMaskId(null);
   }, [currentPage, updateCurrentPage]);
 
   useEffect(() => {
@@ -268,10 +378,13 @@ export default function QuickBookCreator() {
         if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeBox(activeBoxId); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateBox(activeBoxId); }
       }
+      if (activeMaskId) {
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeMask(activeMaskId); }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeBoxId, removeBox, duplicateBox]);
+  }, [activeBoxId, activeMaskId, removeBox, removeMask, duplicateBox]);
 
   const applyHighlight = () => {
     if (!activeBoxId || activeSelection.boxId !== activeBoxId) return;
@@ -328,6 +441,8 @@ export default function QuickBookCreator() {
   const extractPageData = useCallback((pageData, spreadIndex) => {
     const leftBoxes = [];
     const rightBoxes = [];
+    const leftMasksArr = [];
+    const rightMasksArr = [];
     const formatVal = (val) => parseFloat(val.toFixed(2));
 
     [...pageData.boxes]
@@ -336,6 +451,11 @@ export default function QuickBookCreator() {
         if ((box.x + box.w / 2) < 300) leftBoxes.push(box);
         else rightBoxes.push(box);
       });
+
+    [...(pageData.masks || [])].forEach(mask => {
+        if ((mask.x + mask.w / 2) < 300) leftMasksArr.push(mask);
+        else rightMasksArr.push(mask);
+    });
 
     const formatTextWithColors = (box) => {
       const text = box.text || "";
@@ -372,8 +492,28 @@ export default function QuickBookCreator() {
       left: isLeft ? `${formatVal((box.x / 300) * 100)}%` : `${formatVal(((box.x - 300) / 300) * 100)}%`
     });
 
-    const leftText = leftBoxes.map(b => mapBoxToData(b, true));
-    const rightText = rightBoxes.map(b => mapBoxToData(b, false));
+    const mapMaskToData = (mask, isLeft, idx, spreadIndex) => {
+      const truePageIndex = (spreadIndex * 2) + (isLeft ? 0 : 1);
+      return {
+        id: `title-mask-${truePageIndex}-${idx}`,
+        isMask: true,
+        text: "", // Empty because it's a mask
+        top: `${formatVal((mask.y / 400) * 100)}%`,
+        width: `${formatVal((mask.w / 300) * 100)}%`,
+        height: `${formatVal((mask.h / 400) * 100)}%`, // We provide height for masks
+        left: isLeft ? `${formatVal((mask.x / 300) * 100)}%` : `${formatVal(((mask.x - 300) / 300) * 100)}%`
+      };
+    };
+
+    const leftText = [
+        ...leftBoxes.map(b => mapBoxToData(b, true)),
+        ...leftMasksArr.map((m, idx) => mapMaskToData(m, true, idx, spreadIndex))
+    ];
+    
+    const rightText = [
+        ...rightBoxes.map(b => mapBoxToData(b, false)),
+        ...rightMasksArr.map((m, idx) => mapMaskToData(m, false, idx, spreadIndex))
+    ];
 
     const timingArray = [];
     try {
@@ -382,6 +522,8 @@ export default function QuickBookCreator() {
         if (assemblyData.words) {
           const rawWords = assemblyData.words;
           let timeIndex = 0;
+          let titleStartTime = 0;
+          let titleEndTime = 2500; // Safe fallback
 
           const searchLimit = Math.min(rawWords.length - 1, 15);
           for (let i = 0; i < searchLimit; i++) {
@@ -390,10 +532,34 @@ export default function QuickBookCreator() {
               const nextWordClean = rawWords[i + 1].text.replace(/[^0-9]/g, '');
               if (nextWordClean !== '') {
                 timeIndex = i + 2; 
+                // Set the exact time window for the Title! (Everything before body text begins)
+                titleStartTime = rawWords[0].start;
+                titleEndTime = rawWords[timeIndex - 1].end;
                 break;
               }
             }
           }
+
+          // Generate Timing IDs specifically for masks
+          leftMasksArr.forEach((m, idx) => {
+            const truePageIndex = (spreadIndex * 2);
+            timingArray.push({
+              id: `title-mask-${truePageIndex}-${idx}`,
+              startTime: titleStartTime,
+              endTime: titleEndTime,
+              word: "TITLE_MASK"
+            });
+          });
+
+          rightMasksArr.forEach((m, idx) => {
+            const truePageIndex = (spreadIndex * 2) + 1;
+            timingArray.push({
+              id: `title-mask-${truePageIndex}-${idx}`,
+              startTime: titleStartTime,
+              endTime: titleEndTime,
+              word: "TITLE_MASK"
+            });
+          });
 
           const processBlock = (box, localSideIdx, blockIdx) => {
             const words = box.text.split(/[\s\n]+/);
@@ -590,9 +756,9 @@ export default function QuickBookCreator() {
           </div>
         </div>
 
-        <h3 style={{ borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px', fontSize: '14px' }}>Text Properties</h3>
+        <h3 style={{ borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px', fontSize: '14px' }}>Properties</h3>
 
-        {activeBox ? (
+        {activeBoxId && activeBox ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
               <button onClick={() => updateBox(activeBox.id, { fontSizePx: 24, fontWeight: '800' })} style={{ flex: 1, padding: '8px', cursor: 'pointer', backgroundColor: '#eef2f5', border: '1px solid #ccc', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#333' }}>
@@ -671,9 +837,19 @@ export default function QuickBookCreator() {
               <strong>Shortcuts:</strong><br />• <kbd>Delete</kbd> to remove box<br />• <kbd>Ctrl+D</kbd> to duplicate
             </div>
           </div>
+        ) : activeMaskId && activeMask ? (
+          <div style={{ padding: '20px 15px', textAlign: 'center', backgroundColor: '#fef1f0', border: '1px solid #fbdad8', borderRadius: '8px' }}>
+            <h4 style={{ color: '#e74c3c', margin: '0 0 10px 0', fontSize: '14px' }}>Title Mask Selected</h4>
+            <p style={{ fontSize: '12px', color: '#555', marginBottom: '10px', lineHeight: '1.4' }}>
+              Drag and resize this box over the title text embedded in your image.
+            </p>
+            <p style={{ fontSize: '12px', color: '#555', lineHeight: '1.4', fontWeight: 'bold' }}>
+              It will automatically be synced to pop fully when the title audio plays before the main text.
+            </p>
+          </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#999', fontSize: '14px' }}>
-            Click on a text box on the canvas to edit its properties.
+            Click on a text box or mask to edit properties.
           </div>
         )}
       </div>
@@ -684,7 +860,10 @@ export default function QuickBookCreator() {
         <div style={{ width: '840px', height: '560px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '20px 0' }}>
           <div 
             onMouseDown={(e) => {
-              if (e.target === e.currentTarget || e.target.id === 'canvas-center-line') setActiveBoxId(null);
+              if (e.target === e.currentTarget || e.target.id === 'canvas-center-line') {
+                setActiveBoxId(null);
+                setActiveMaskId(null);
+              }
             }}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -706,10 +885,17 @@ export default function QuickBookCreator() {
           >
             <div id="canvas-center-line" style={{ position: 'absolute', top: 0, bottom: 0, left: '300px', width: '2px', backgroundColor: 'red', zIndex: 5, opacity: 0.5, pointerEvents: 'none' }} />
 
+            {(currentPage.masks || []).map(mask => (
+              <DraggableMask 
+                key={mask.id} mask={mask} updateMask={updateMask} removeMask={removeMask} 
+                isActive={activeMaskId === mask.id} setActiveMask={(id) => { setActiveMaskId(id); setActiveBoxId(null); }}
+              />
+            ))}
+
             {currentPage.boxes.map(box => (
               <DraggableBox 
                 key={box.id} box={box} updateBox={updateBox} removeBox={removeBox} 
-                isActive={activeBoxId === box.id} setActiveBox={setActiveBoxId}
+                isActive={activeBoxId === box.id} setActiveBox={(id) => { setActiveBoxId(id); setActiveMaskId(null); }}
                 setActiveSelection={setActiveSelection}
               />
             ))}
@@ -717,10 +903,13 @@ export default function QuickBookCreator() {
         </div>
 
         <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-          <button onClick={addBox} style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#123C52', color: 'white', border: 'none', borderRadius: '4px' }}>
+          <button onClick={addBox} style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#123C52', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>
             + Add Text Box
           </button>
-          <label style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#26B8F5', color: 'white', borderRadius: '4px' }}>
+          <button onClick={addMask} style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>
+            + Add Title Mask
+          </button>
+          <label style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#26B8F5', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}>
             Upload Background
             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
           </label>
@@ -772,7 +961,7 @@ export default function QuickBookCreator() {
         <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
           <div>
             <h3 style={{ fontSize: '14px' }}>2. DB Payload Output (Current Spread)</h3>
-            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>The timing array now accurately captures Start & End times!</p>
+            <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Notice your Title Masks automatically sync to the start of the audio!</p>
             
             <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff00', padding: '15px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'pre-wrap', wordWrap: 'break-word', maxHeight: '300px', overflowY: 'auto' }}>
               {`// --- left_text & right_text ---\n`}
