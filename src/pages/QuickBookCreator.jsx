@@ -3,66 +3,57 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
 
-// --- HELPER COMPONENT: DRAGGABLE TITLE MASK ---
+// --- HELPER COMPONENT: FREE-FORM POLYGON MASK ---
 const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [resizeMode, setResizeMode] = useState(null); 
-  
-  const actionRef = useRef({ startX: 0, startY: 0, initialX: mask.x, initialY: mask.y, initialW: mask.w, initialH: mask.h });
+  const [draggedPoint, setDraggedPoint] = useState(null);
+  const [isDraggingAll, setIsDraggingAll] = useState(false);
+  const actionRef = useRef({ startX: 0, startY: 0, initialPoints: [] });
 
-  const startDrag = (e) => {
+  // Default to a 4-point polygon if loading an older mask
+  const pts = mask.points || [
+    {x: mask.x || 100, y: mask.y || 100},
+    {x: (mask.x || 100) + (mask.w || 250), y: mask.y || 100},
+    {x: (mask.x || 100) + (mask.w || 250), y: (mask.y || 100) + (mask.h || 80)},
+    {x: mask.x || 100, y: (mask.y || 100) + (mask.h || 80)}
+  ];
+
+  const startDragAll = (e) => {
     e.stopPropagation();
     setActiveMask(mask.id);
-    setIsDragging(true);
-    actionRef.current = { startX: e.clientX, startY: e.clientY, initialX: mask.x, initialY: mask.y };
+    setIsDraggingAll(true);
+    actionRef.current = { startX: e.clientX, startY: e.clientY, initialPoints: pts };
   };
 
-  const startResize = (e, mode) => {
+  const startDragPoint = (e, index) => {
     e.stopPropagation();
     setActiveMask(mask.id);
-    setResizeMode(mode);
-    actionRef.current = { startX: e.clientX, startY: e.clientY, initialW: mask.w, initialH: mask.h };
+    setDraggedPoint(index);
+    actionRef.current = { startX: e.clientX, startY: e.clientY, initialPoints: pts };
   };
 
   useEffect(() => {
     const onMouseMove = (e) => {
-      if (isDragging) {
-        const dx = e.clientX - actionRef.current.startX;
-        const dy = e.clientY - actionRef.current.startY;
-        updateMask(mask.id, {
-          x: Math.max(0, Math.min(600 - mask.w, actionRef.current.initialX + dx)),
-          y: Math.max(0, Math.min(400 - mask.h, actionRef.current.initialY + dy)),
-        });
-      } else if (resizeMode) {
-        const dx = e.clientX - actionRef.current.startX;
-        const dy = e.clientY - actionRef.current.startY;
-        
-        let newX = actionRef.current.initialX;
-        let newY = actionRef.current.initialY;
-        let newW = actionRef.current.initialW;
-        let newH = actionRef.current.initialH;
+      const dx = e.clientX - actionRef.current.startX;
+      const dy = e.clientY - actionRef.current.startY;
 
-        if (resizeMode.includes('w')) {
-          newW = Math.max(20, actionRef.current.initialW - dx);
-          newX = actionRef.current.initialX + (actionRef.current.initialW - newW);
-        }
-        if (resizeMode.includes('e')) {
-          newW = Math.max(20, Math.min(600 - newX, actionRef.current.initialW + dx));
-        }
-        if (resizeMode.includes('n')) {
-          newH = Math.max(20, actionRef.current.initialH - dy);
-          newY = actionRef.current.initialY + (actionRef.current.initialH - newH);
-        }
-        if (resizeMode.includes('s')) {
-          newH = Math.max(20, Math.min(400 - newY, actionRef.current.initialH + dy));
-        }
-
-        updateMask(mask.id, { x: newX, y: newY, w: newW, h: newH });
+      if (isDraggingAll) {
+        const newPoints = actionRef.current.initialPoints.map(p => ({
+          x: Math.max(0, Math.min(600, p.x + dx)),
+          y: Math.max(0, Math.min(400, p.y + dy))
+        }));
+        updateMask(mask.id, { points: newPoints });
+      } else if (draggedPoint !== null) {
+        const newPoints = [...actionRef.current.initialPoints];
+        newPoints[draggedPoint] = {
+          x: Math.max(0, Math.min(600, newPoints[draggedPoint].x + dx)),
+          y: Math.max(0, Math.min(400, newPoints[draggedPoint].y + dy))
+        };
+        updateMask(mask.id, { points: newPoints });
       }
     };
-    const onMouseUp = () => { setIsDragging(false); setResizeMode(null); };
-    
-    if (isDragging || resizeMode) {
+    const onMouseUp = () => { setIsDraggingAll(false); setDraggedPoint(null); };
+
+    if (isDraggingAll || draggedPoint !== null) {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     }
@@ -70,48 +61,54 @@ const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [isDragging, resizeMode, mask.id, mask.w, mask.h, mask.x, mask.y, updateMask]);
+  }, [isDraggingAll, draggedPoint, mask.id, updateMask]);
+
+  const minX = Math.min(...pts.map(p => p.x));
+  const minY = Math.min(...pts.map(p => p.y));
 
   return (
     <div
       onMouseDown={(e) => { e.stopPropagation(); setActiveMask(mask.id); }}
-      onClick={(e) => e.stopPropagation()}
       style={{
-        position: 'absolute', left: mask.x, top: mask.y, width: mask.w, height: mask.h,
-        border: isActive ? '2px dashed #e74c3c' : 'none',
-        backgroundColor: isActive ? 'rgba(231, 76, 60, 0.25)' : 'transparent',
-        zIndex: isActive ? 50 : 15, boxSizing: 'border-box', cursor: isActive ? 'move' : 'pointer'
+        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+        pointerEvents: 'none', zIndex: isActive ? 50 : 15
       }}
-      onMouseDownCapture={startDrag}
     >
-      {isActive && (
-        <div style={{ position: 'absolute', top: 2, left: 4, color: '#e74c3c', fontSize: '10px', fontWeight: 'bold', pointerEvents: 'none' }}>
-          Title Mask
-        </div>
-      )}
+      <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+        <polygon 
+          points={pts.map(p => `${p.x},${p.y}`).join(' ')} 
+          fill={isActive ? 'rgba(231, 76, 60, 0.25)' : 'rgba(231, 76, 60, 0.1)'}
+          stroke={isActive ? '#e74c3c' : 'rgba(231, 76, 60, 0.6)'}
+          strokeWidth="2"
+          strokeDasharray={isActive ? "none" : "5,5"}
+          pointerEvents="auto"
+          onMouseDown={startDragAll}
+          style={{ cursor: isActive ? 'move' : 'pointer' }}
+        />
+      </svg>
 
       {isActive && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); removeMask(mask.id); }} 
-          style={{ position: 'absolute', top: '-26px', right: '-2px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' }}
-        >Delete</button>
+        <div style={{ position: 'absolute', top: Math.max(0, minY - 30), left: minX, pointerEvents: 'auto' }}>
+          <button 
+            onClick={(e) => { e.stopPropagation(); removeMask(mask.id); }} 
+            style={{ background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' }}
+          >Delete</button>
+        </div>
       )}
       
-      {isActive && (
-        <>
-          {/* Edge Handles */}
-          <div onMouseDown={(e) => startResize(e, 'n')} style={{ position: 'absolute', top: '-4px', left: 0, right: 0, height: '8px', cursor: 'ns-resize' }} />
-          <div onMouseDown={(e) => startResize(e, 's')} style={{ position: 'absolute', bottom: '-4px', left: 0, right: 0, height: '8px', cursor: 'ns-resize' }} />
-          <div onMouseDown={(e) => startResize(e, 'w')} style={{ position: 'absolute', top: 0, bottom: 0, left: '-4px', width: '8px', cursor: 'ew-resize' }} />
-          <div onMouseDown={(e) => startResize(e, 'e')} style={{ position: 'absolute', top: 0, bottom: 0, right: '-4px', width: '8px', cursor: 'ew-resize' }} />
-          
-          {/* Corner Handles */}
-          <div onMouseDown={(e) => startResize(e, 'nw')} style={{ position: 'absolute', top: '-6px', left: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
-          <div onMouseDown={(e) => startResize(e, 'ne')} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nesw-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
-          <div onMouseDown={(e) => startResize(e, 'sw')} style={{ position: 'absolute', bottom: '-6px', left: '-6px', width: '12px', height: '12px', cursor: 'nesw-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
-          <div onMouseDown={(e) => startResize(e, 'se')} style={{ position: 'absolute', bottom: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
-        </>
-      )}
+      {/* FREE-FORM CORNER HANDLES */}
+      {isActive && pts.map((p, i) => (
+        <div 
+          key={i}
+          onMouseDown={(e) => startDragPoint(e, i)}
+          style={{
+            position: 'absolute', left: p.x - 6, top: p.y - 6,
+            width: '12px', height: '12px', backgroundColor: '#e74c3c',
+            borderRadius: '50%', cursor: 'crosshair', pointerEvents: 'auto',
+            border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+          }}
+        />
+      ))}
     </div>
   );
 };
@@ -363,7 +360,15 @@ export default function QuickBookCreator() {
 
   const addMask = () => {
     const newId = 'mask-' + Date.now().toString();
-    const newMask = { id: newId, x: 100, y: 100, w: 250, h: 80 }; 
+    const newMask = { 
+      id: newId, 
+      points: [
+        {x: 80, y: 50},
+        {x: 280, y: 50},
+        {x: 280, y: 130},
+        {x: 80, y: 130}
+      ]
+    }; 
     updateCurrentPage({ masks: [...(currentPage.masks || []), newMask] });
     setActiveMaskId(newId);
     setActiveBoxId(null);
@@ -479,8 +484,17 @@ export default function QuickBookCreator() {
       });
 
     [...(pageData.masks || [])].forEach(mask => {
-        if ((mask.x + mask.w / 2) < 300) leftMasksArr.push(mask);
-        else rightMasksArr.push(mask);
+        // Fallback for older rect masks
+        const pts = mask.points || [
+          {x: mask.x, y: mask.y}, {x: mask.x + mask.w, y: mask.y},
+          {x: mask.x + mask.w, y: mask.y + mask.h}, {x: mask.x, y: mask.y + mask.h}
+        ];
+        const minX = Math.min(...pts.map(p => p.x));
+        const maxX = Math.max(...pts.map(p => p.x));
+        const w = maxX - minX;
+
+        if ((minX + w / 2) < 300) leftMasksArr.push({ ...mask, points: pts });
+        else rightMasksArr.push({ ...mask, points: pts });
     });
 
     const formatTextWithColors = (box) => {
@@ -520,14 +534,26 @@ export default function QuickBookCreator() {
 
     const mapMaskToData = (mask, isLeft, idx, spreadIndex) => {
       const truePageIndex = (spreadIndex * 2) + (isLeft ? 0 : 1);
+      
+      const minX = Math.min(...mask.points.map(p => p.x));
+      const minY = Math.min(...mask.points.map(p => p.y));
+      const maxX = Math.max(...mask.points.map(p => p.x));
+      const maxY = Math.max(...mask.points.map(p => p.y));
+      const w = maxX - minX;
+      const h = maxY - minY;
+      
+      // Calculate true clip-path inside its bounds!
+      const clipPath = `polygon(${mask.points.map(p => `${formatVal(((p.x - minX)/w)*100)}% ${formatVal(((p.y - minY)/h)*100)}%`).join(', ')})`;
+
       return {
         id: `title-mask-${truePageIndex}-${idx}`,
         isMask: true,
         text: "", 
-        top: `${formatVal((mask.y / 400) * 100)}%`,
-        width: `${formatVal((mask.w / 300) * 100)}%`,
-        height: `${formatVal((mask.h / 400) * 100)}%`, 
-        left: isLeft ? `${formatVal((mask.x / 300) * 100)}%` : `${formatVal(((mask.x - 300) / 300) * 100)}%`
+        top: `${formatVal((minY / 400) * 100)}%`,
+        width: `${formatVal((w / 300) * 100)}%`,
+        height: `${formatVal((h / 400) * 100)}%`, 
+        left: isLeft ? `${formatVal((minX / 300) * 100)}%` : `${formatVal(((minX - 300) / 300) * 100)}%`,
+        clipPath: clipPath
       };
     };
 
@@ -865,10 +891,10 @@ export default function QuickBookCreator() {
           <div style={{ padding: '20px 15px', textAlign: 'center', backgroundColor: '#fef1f0', border: '1px solid #fbdad8', borderRadius: '8px' }}>
             <h4 style={{ color: '#e74c3c', margin: '0 0 10px 0', fontSize: '14px' }}>Title Mask Selected</h4>
             <p style={{ fontSize: '12px', color: '#555', marginBottom: '10px', lineHeight: '1.4' }}>
-              Drag and resize this box over the title text embedded in your image.
+              Grab any of the 4 corner handles to perfectly trace the angled shape of the title in the image!
             </p>
             <p style={{ fontSize: '12px', color: '#555', lineHeight: '1.4', fontWeight: 'bold' }}>
-              It will automatically be synced to pop fully when the title audio plays before the main text.
+              It will automatically be synced to pop fully when the title audio plays.
             </p>
           </div>
         ) : (
