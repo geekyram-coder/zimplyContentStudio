@@ -36,11 +36,28 @@ const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }
       } else if (resizeMode) {
         const dx = e.clientX - actionRef.current.startX;
         const dy = e.clientY - actionRef.current.startY;
-        let newW = mask.w;
-        let newH = mask.h;
-        if (resizeMode.includes('e')) newW = Math.max(20, Math.min(600 - mask.x, actionRef.current.initialW + dx));
-        if (resizeMode.includes('s')) newH = Math.max(20, Math.min(400 - mask.y, actionRef.current.initialH + dy));
-        updateMask(mask.id, { w: newW, h: newH });
+        
+        let newX = actionRef.current.initialX;
+        let newY = actionRef.current.initialY;
+        let newW = actionRef.current.initialW;
+        let newH = actionRef.current.initialH;
+
+        if (resizeMode.includes('w')) {
+          newW = Math.max(20, actionRef.current.initialW - dx);
+          newX = actionRef.current.initialX + (actionRef.current.initialW - newW);
+        }
+        if (resizeMode.includes('e')) {
+          newW = Math.max(20, Math.min(600 - newX, actionRef.current.initialW + dx));
+        }
+        if (resizeMode.includes('n')) {
+          newH = Math.max(20, actionRef.current.initialH - dy);
+          newY = actionRef.current.initialY + (actionRef.current.initialH - newH);
+        }
+        if (resizeMode.includes('s')) {
+          newH = Math.max(20, Math.min(400 - newY, actionRef.current.initialH + dy));
+        }
+
+        updateMask(mask.id, { x: newX, y: newY, w: newW, h: newH });
       }
     };
     const onMouseUp = () => { setIsDragging(false); setResizeMode(null); };
@@ -61,15 +78,17 @@ const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }
       onClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute', left: mask.x, top: mask.y, width: mask.w, height: mask.h,
-        border: isActive ? '2px solid #e74c3c' : '2px dashed rgba(231, 76, 60, 0.6)',
-        backgroundColor: isActive ? 'rgba(231, 76, 60, 0.25)' : 'rgba(231, 76, 60, 0.1)',
-        zIndex: isActive ? 50 : 15, boxSizing: 'border-box', cursor: 'move'
+        border: isActive ? '2px dashed #e74c3c' : 'none',
+        backgroundColor: isActive ? 'rgba(231, 76, 60, 0.25)' : 'transparent',
+        zIndex: isActive ? 50 : 15, boxSizing: 'border-box', cursor: isActive ? 'move' : 'pointer'
       }}
       onMouseDownCapture={startDrag}
     >
-      <div style={{ position: 'absolute', top: 2, left: 4, color: '#e74c3c', fontSize: '10px', fontWeight: 'bold', pointerEvents: 'none' }}>
-        Title Mask
-      </div>
+      {isActive && (
+        <div style={{ position: 'absolute', top: 2, left: 4, color: '#e74c3c', fontSize: '10px', fontWeight: 'bold', pointerEvents: 'none' }}>
+          Title Mask
+        </div>
+      )}
 
       {isActive && (
         <button 
@@ -80,9 +99,17 @@ const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }
       
       {isActive && (
         <>
-          <div onMouseDown={(e) => startResize(e, 'e')} style={{ position: 'absolute', top: 0, bottom: 0, right: '-5px', width: '10px', cursor: 'ew-resize' }} />
-          <div onMouseDown={(e) => startResize(e, 's')} style={{ position: 'absolute', left: 0, right: 0, bottom: '-5px', height: '10px', cursor: 'ns-resize' }} />
-          <div onMouseDown={(e) => startResize(e, 'se')} style={{ position: 'absolute', bottom: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%' }} />
+          {/* Edge Handles */}
+          <div onMouseDown={(e) => startResize(e, 'n')} style={{ position: 'absolute', top: '-4px', left: 0, right: 0, height: '8px', cursor: 'ns-resize' }} />
+          <div onMouseDown={(e) => startResize(e, 's')} style={{ position: 'absolute', bottom: '-4px', left: 0, right: 0, height: '8px', cursor: 'ns-resize' }} />
+          <div onMouseDown={(e) => startResize(e, 'w')} style={{ position: 'absolute', top: 0, bottom: 0, left: '-4px', width: '8px', cursor: 'ew-resize' }} />
+          <div onMouseDown={(e) => startResize(e, 'e')} style={{ position: 'absolute', top: 0, bottom: 0, right: '-4px', width: '8px', cursor: 'ew-resize' }} />
+          
+          {/* Corner Handles */}
+          <div onMouseDown={(e) => startResize(e, 'nw')} style={{ position: 'absolute', top: '-6px', left: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
+          <div onMouseDown={(e) => startResize(e, 'ne')} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nesw-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
+          <div onMouseDown={(e) => startResize(e, 'sw')} style={{ position: 'absolute', bottom: '-6px', left: '-6px', width: '12px', height: '12px', cursor: 'nesw-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
+          <div onMouseDown={(e) => startResize(e, 'se')} style={{ position: 'absolute', bottom: '-6px', right: '-6px', width: '12px', height: '12px', cursor: 'nwse-resize', backgroundColor: '#e74c3c', borderRadius: '50%', zIndex: 20 }} />
         </>
       )}
     </div>
@@ -264,7 +291,6 @@ export default function QuickBookCreator() {
   const [thumbnailObj, setThumbnailObj] = useState(null);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
 
-  // Added masks array to the page state
   const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
@@ -337,7 +363,7 @@ export default function QuickBookCreator() {
 
   const addMask = () => {
     const newId = 'mask-' + Date.now().toString();
-    const newMask = { id: newId, x: 100, y: 100, w: 250, h: 80 }; // Default size for a mask
+    const newMask = { id: newId, x: 100, y: 100, w: 250, h: 80 }; 
     updateCurrentPage({ masks: [...(currentPage.masks || []), newMask] });
     setActiveMaskId(newId);
     setActiveBoxId(null);
@@ -497,10 +523,10 @@ export default function QuickBookCreator() {
       return {
         id: `title-mask-${truePageIndex}-${idx}`,
         isMask: true,
-        text: "", // Empty because it's a mask
+        text: "", 
         top: `${formatVal((mask.y / 400) * 100)}%`,
         width: `${formatVal((mask.w / 300) * 100)}%`,
-        height: `${formatVal((mask.h / 400) * 100)}%`, // We provide height for masks
+        height: `${formatVal((mask.h / 400) * 100)}%`, 
         left: isLeft ? `${formatVal((mask.x / 300) * 100)}%` : `${formatVal(((mask.x - 300) / 300) * 100)}%`
       };
     };
@@ -523,7 +549,7 @@ export default function QuickBookCreator() {
           const rawWords = assemblyData.words;
           let timeIndex = 0;
           let titleStartTime = 0;
-          let titleEndTime = 2500; // Safe fallback
+          let titleEndTime = 2500; 
 
           const searchLimit = Math.min(rawWords.length - 1, 15);
           for (let i = 0; i < searchLimit; i++) {
@@ -532,7 +558,6 @@ export default function QuickBookCreator() {
               const nextWordClean = rawWords[i + 1].text.replace(/[^0-9]/g, '');
               if (nextWordClean !== '') {
                 timeIndex = i + 2; 
-                // Set the exact time window for the Title! (Everything before body text begins)
                 titleStartTime = rawWords[0].start;
                 titleEndTime = rawWords[timeIndex - 1].end;
                 break;
@@ -540,7 +565,6 @@ export default function QuickBookCreator() {
             }
           }
 
-          // Generate Timing IDs specifically for masks
           leftMasksArr.forEach((m, idx) => {
             const truePageIndex = (spreadIndex * 2);
             timingArray.push({
@@ -907,7 +931,7 @@ export default function QuickBookCreator() {
             + Add Text Box
           </button>
           <button onClick={addMask} style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>
-            + Add Title Mask
+            + Title Mask
           </button>
           <label style={{ padding: '10px 20px', cursor: 'pointer', backgroundColor: '#26B8F5', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}>
             Upload Background
