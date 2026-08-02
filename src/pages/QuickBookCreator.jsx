@@ -17,7 +17,7 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
       textareaRef.current.style.height = '0px'; 
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [box.text, box.w, box.fontSizePx, box.fontFamily, box.fontWeight, isEditing]);
+  }, [box.text, box.w, box.fontSizePx, box.fontFamily, box.fontWeight, box.wordSpacingPx, isEditing]);
 
   useEffect(() => {
     if (!isActive) setIsEditing(false);
@@ -84,6 +84,7 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
     fontFamily: `'${box.fontFamily}', sans-serif`,
     fontSize: `${box.fontSizePx}px`,
     fontWeight: box.fontWeight,
+    wordSpacing: `${box.wordSpacingPx || 0}px`,
     lineHeight: '1.4',
     padding: '2px',
     boxSizing: 'border-box',
@@ -237,7 +238,7 @@ export default function QuickBookCreator() {
 
   const addBox = () => {
     const newId = Date.now().toString();
-    const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 14, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordColors: {} };
+    const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 14, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordSpacingPx: 4, wordColors: {} };
     updateCurrentPage({ boxes: [...currentPage.boxes, newBox] });
     setActiveBoxId(newId);
   };
@@ -367,6 +368,7 @@ export default function QuickBookCreator() {
       fontWeight: box.fontWeight,
       fontFamily: box.fontFamily,
       color: box.color || '#000000',
+      wordSpacing: `${formatVal(((box.wordSpacingPx || 0) / 600) * 100)}vw`,
       left: isLeft ? `${formatVal((box.x / 300) * 100)}%` : `${formatVal(((box.x - 300) / 300) * 100)}%`
     });
 
@@ -402,7 +404,6 @@ export default function QuickBookCreator() {
                 const hasNoOffset = (timeIndex === 0);
                 const isFirstBookWord = (truePageIndex === 0 && blockIdx === 0 && wordIdx === 0);
                 
-                // Extract BOTH start and end times for flawless DOM syncing
                 const sTime = (isFirstBookWord && hasNoOffset) ? 0 : rawWords[timeIndex].start;
                 const eTime = rawWords[timeIndex].end;
                 
@@ -436,7 +437,6 @@ export default function QuickBookCreator() {
     return extractPageData(currentPage, currentPageIndex);
   }, [currentPage, currentPageIndex, extractPageData]);
 
-  // --- DB SAVE LOGIC ---
   const handleSaveToDB = async () => {
     let parsedMeta;
     try {
@@ -619,6 +619,14 @@ export default function QuickBookCreator() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input type="range" min="10" max="60" value={activeBox.fontSizePx} onChange={(e) => updateBox(activeBox.id, { fontSizePx: parseInt(e.target.value) })} style={{ flex: 1 }} />
                 <input type="number" value={activeBox.fontSizePx} onChange={(e) => updateBox(activeBox.id, { fontSizePx: parseInt(e.target.value) })} style={{ width: '50px', padding: '4px', textAlign: 'center', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '8px' }}><Maximize size={14} /> Word Spacing (px)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input type="range" min="0" max="30" value={activeBox.wordSpacingPx || 0} onChange={(e) => updateBox(activeBox.id, { wordSpacingPx: parseInt(e.target.value) })} style={{ flex: 1 }} />
+                <input type="number" value={activeBox.wordSpacingPx || 0} onChange={(e) => updateBox(activeBox.id, { wordSpacingPx: parseInt(e.target.value) })} style={{ width: '50px', padding: '4px', textAlign: 'center', border: '1px solid #ccc', borderRadius: '4px' }} />
               </div>
             </div>
 
