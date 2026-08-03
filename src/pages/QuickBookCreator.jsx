@@ -484,7 +484,6 @@ export default function QuickBookCreator() {
       });
 
     [...(pageData.masks || [])].forEach(mask => {
-        // Fallback for older rect masks
         const pts = mask.points || [
           {x: mask.x, y: mask.y}, {x: mask.x + mask.w, y: mask.y},
           {x: mask.x + mask.w, y: mask.y + mask.h}, {x: mask.x, y: mask.y + mask.h}
@@ -542,7 +541,6 @@ export default function QuickBookCreator() {
       const w = maxX - minX;
       const h = maxY - minY;
       
-      // Calculate true clip-path inside its bounds!
       const clipPath = `polygon(${mask.points.map(p => `${formatVal(((p.x - minX)/w)*100)}% ${formatVal(((p.y - minY)/h)*100)}%`).join(', ')})`;
 
       return {
@@ -570,9 +568,29 @@ export default function QuickBookCreator() {
     const timingArray = [];
     try {
       if (pageData.assemblyJsonStr.trim() !== '') {
-        const assemblyData = JSON.parse(pageData.assemblyJsonStr);
-        if (assemblyData.words) {
-          const rawWords = assemblyData.words;
+        const newAudioData = JSON.parse(pageData.assemblyJsonStr);
+        if (newAudioData.segments) {
+          
+          // 1. EXTRACT ALL VALID WORDS FROM SEGMENTS
+          const rawWords = [];
+          newAudioData.segments.forEach(segment => {
+            if (segment.words) {
+              segment.words.forEach(w => {
+                const trimmedText = w.text.trim();
+                // Filter out empty space word blocks!
+                if (trimmedText !== '') {
+                  rawWords.push({
+                    text: trimmedText,
+                    // Convert seconds to exact milliseconds!
+                    start: Math.round(w.start_time * 1000), 
+                    end: Math.round(w.end_time * 1000)
+                  });
+                }
+              });
+            }
+          });
+
+          // 2. IDENTIFY TITLE BOUNDARY
           let timeIndex = 0;
           let titleStartTime = 0;
           let titleEndTime = 2500; 
@@ -591,6 +609,7 @@ export default function QuickBookCreator() {
             }
           }
 
+          // 3. APPLY MASKS TIMING
           leftMasksArr.forEach((m, idx) => {
             const truePageIndex = (spreadIndex * 2);
             timingArray.push({
@@ -611,6 +630,7 @@ export default function QuickBookCreator() {
             });
           });
 
+          // 4. APPLY BODY TEXT TIMINGS
           const processBlock = (box, localSideIdx, blockIdx) => {
             const words = box.text.split(/[\s\n]+/);
             words.forEach((word, wordIdx) => {
@@ -999,10 +1019,10 @@ export default function QuickBookCreator() {
             )}
           </div>
 
-          <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the AssemblyAI JSON here.</p>
+          <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the highly-accurate JSON here.</p>
           <textarea 
             style={{ width: '100%', height: '100px', fontFamily: 'monospace', fontSize: '11px', padding: '8px' }}
-            placeholder='{"words": [{"text": "The", "start": 97} ... ]}'
+            placeholder='{"language_code": "eng", "segments": ... }'
             value={currentPage.assemblyJsonStr}
             onChange={(e) => updateCurrentPage({ assemblyJsonStr: e.target.value })}
           />
