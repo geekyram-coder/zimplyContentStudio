@@ -599,11 +599,11 @@ export default function QuickBookCreator() {
           for (let i = 0; i < searchLimit; i++) {
             const currentWordClean = rawWords[i].text.toLowerCase().replace(/[^a-z]/g, '');
             if (currentWordClean === 'chapter') {
-              const nextWordClean = rawWords[i + 1].text.replace(/[^0-9]/g, '');
-              if (nextWordClean !== '') {
+              // If "chapter" is found, take the very next word regardless of if it is a digit ("2") or text ("two")
+              if (i + 1 < rawWords.length) {
                 timeIndex = i + 2; 
                 titleStartTime = rawWords[0].start;
-                titleEndTime = rawWords[timeIndex - 1].end;
+                titleEndTime = rawWords[i + 1].end;
                 break;
               }
             }
