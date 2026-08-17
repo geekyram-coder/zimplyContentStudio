@@ -182,6 +182,9 @@ export default function UploadForm() {
         const cardInsertions = [];
         for (const card of remainingCards) {
           const dbCardType = (card.type || 'Story Card').toLowerCase().replace(' ', '_');
+          
+          const cardNumStr = card.number ? card.number.toString() : "";
+          const cardExtraData = parsedMeta.cardData && parsedMeta.cardData[cardNumStr] ? parsedMeta.cardData[cardNumStr] : {};
 
           if (card.files.single) {
             const fileToUpload = card.files.single;
@@ -192,7 +195,10 @@ export default function UploadForm() {
               deck_id: deckId,
               image_url: cardUrl,
               order_index: parseFloat(card.number),
-              card_type: dbCardType
+              card_type: dbCardType,
+              question: cardExtraData.question || null,
+              options: cardExtraData.options || null,
+              correct_option_id: cardExtraData.correct_option_id || null
             });
           } else {
             if (card.files.front) {
@@ -204,7 +210,10 @@ export default function UploadForm() {
                 deck_id: deckId,
                 image_url: cardUrl,
                 order_index: parseFloat(`${card.number}.1`),
-                card_type: dbCardType
+                card_type: dbCardType,
+                question: cardExtraData.question || null,
+                options: cardExtraData.options || null,
+                correct_option_id: cardExtraData.correct_option_id || null
               });
             }
             if (card.files.back) {
@@ -216,7 +225,10 @@ export default function UploadForm() {
                 deck_id: deckId,
                 image_url: cardUrl,
                 order_index: parseFloat(`${card.number}.2`),
-                card_type: dbCardType
+                card_type: dbCardType,
+                question: cardExtraData.question || null,
+                options: cardExtraData.options || null,
+                correct_option_id: cardExtraData.correct_option_id || null
               });
             }
           }
@@ -290,7 +302,7 @@ export default function UploadForm() {
               style={{ minHeight: '160px', fontFamily: 'monospace', whiteSpace: 'pre', padding: '1rem', resize: 'vertical' }}
               value={metadataJson}
               onChange={(e) => setMetadataJson(e.target.value)}
-              placeholder={'{\n  "title": "Enter deck title...",\n  "subject": "e.g. Science",\n  "category": "e.g. Earth & Nature",\n  "ageApplicability": [5, 6],\n  "description": "Enter description here..."\n}'}
+              placeholder={'{\n  "title": "Enter deck title...",\n  "subject": "e.g. Science",\n  "category": "e.g. Earth & Nature",\n  "ageApplicability": [5, 6],\n  "description": "Enter description here...",\n  "cardData": {\n    "1": {\n      "question": "Which animal is the largest land mammal?",\n      "options": [\n        { "id": "opt_1", "text": "Elephant" },\n        { "id": "opt_2", "text": "Giraffe" },\n        { "id": "opt_3", "text": "Rhino" }\n      ],\n      "correct_option_id": "opt_1"\n    },\n    "3": {\n      "question": "Guess the animal by its shadow!",\n      "options": [\n        { "id": "opt_1", "text": "Lion" },\n        { "id": "opt_2", "text": "Tiger" }\n      ],\n      "correct_option_id": "opt_1"\n    }\n  }\n}'}
             />
           </div>
           
