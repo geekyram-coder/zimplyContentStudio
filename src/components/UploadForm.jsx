@@ -20,8 +20,29 @@ export default function UploadForm() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   
-
   const [isDragging, setIsDragging] = useState(false);
+
+  // New state for Quizzes Dropdowns
+  const [quickbooksList, setQuickbooksList] = useState([]);
+  const [flashcardsList, setFlashcardsList] = useState([]);
+  const [selectedQuickbookId, setSelectedQuickbookId] = useState('');
+  const [selectedFlashcardDeckId, setSelectedFlashcardDeckId] = useState('');
+
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const { data: qbData, error: qbError } = await supabase.from('quickbooks').select('id, title');
+        if (!qbError && qbData) setQuickbooksList(qbData);
+        
+        const { data: fcData, error: fcError } = await supabase.from('flashcard_decks').select('id, title');
+        if (!fcError && fcData) setFlashcardsList(fcData);
+      } catch (err) {
+        console.error("Error fetching dropdown data", err);
+      }
+    };
+    fetchDropdownData();
+  }, []);
+
 
   const processFiles = (selectedFiles) => {
     setFiles(selectedFiles);
@@ -77,6 +98,35 @@ export default function UploadForm() {
       });
       
       setGroupedCards(parsedCards);
+    } else if (contentType === 'Quizzes') {
+      let cards = {};
+      selectedFiles.forEach(file => {
+        const match = file.name.match(/^(\d+|t)\./i);
+        if (match) {
+          const num = match[1].toLowerCase();
+          
+          if (!cards[num]) cards[num] = { number: num, files: {}, previews: {} };
+          
+          const previewUrl = URL.createObjectURL(file);
+          cards[num].files.single = file;
+          cards[num].previews.single = previewUrl;
+        } else {
+          const randomId = Math.random().toString(36).substr(2, 9);
+          cards[randomId] = { number: '?', files: { single: file }, previews: { single: URL.createObjectURL(file) } };
+        }
+      });
+      
+      const parsedCards = Object.values(cards).sort((a, b) => {
+        if (a.number === 't') return -1;
+        if (b.number === 't') return 1;
+        const numA = parseInt(a.number);
+        const numB = parseInt(b.number);
+        if (isNaN(numA)) return 1;
+        if (isNaN(numB)) return -1;
+        return numA - numB;
+      });
+      
+      setGroupedCards(parsedCards);
     }
   };
 
@@ -110,10 +160,10 @@ export default function UploadForm() {
     setGroupedCards(updated);
   };
 
-  const uploadFileToSupabase = async (file, path) => {
-    const { data, error } = await supabase.storage.from('flashcards').upload(path, file, { cacheControl: '3600', upsert: false });
+  const uploadFileToSupabase = async (file, path, bucket = 'flashcards') => {
+    const { data, error } = await supabase.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: false });
     if (error) throw error;
-    const { data: publicUrlData } = supabase.storage.from('flashcards').getPublicUrl(path);
+    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(path);
     return publicUrlData.publicUrl;
   };
 
@@ -142,8 +192,9 @@ export default function UploadForm() {
       return;
     }
 
-    if (!parsedMeta.ageApplicability || parsedMeta.ageApplicability.length === 0) {
-      alert("Please include at least one age in ageApplicability array.");
+    const ages = parsedMeta.ageApplicability || parsedMeta.applicable_ages;
+    if (!ages || ages.length === 0) {
+      alert("Please include at least one age in ageApplicability or applicable_ages array.");
       return;
     }
     
@@ -170,7 +221,7 @@ export default function UploadForm() {
           title: parsedMeta.title,
           thumbnail_url: thumbUrl,
           subject: parsedMeta.subject || 'Science',
-          applicable_ages: parsedMeta.ageApplicability.map(a => parseInt(a)),
+          applicable_ages: ages.map(a => parseInt(a)),
           category: parsedMeta.category || '',
           description: parsedMeta.description || ''
         }).select().single();
@@ -240,8 +291,82 @@ export default function UploadForm() {
         }
 
         setSuccessMsg(`Successfully uploaded deck "${parsedMeta.title}" with ${cardInsertions.length} cards!`);
+      } else if (contentType === 'Quizzes') {
+        const thumbnailCard = groupedCards.find(c => c.number === 't');
+        if (!thumbnailCard || !thumbnailCard.files.single) {
+          throw new Error("Missing thumbnail! Please ensure a file named 't.png' or 't.jpg' is included for the quiz thumbnail.");
+        }
+
+        // 1. Upload Thumbnail
+        const thumbFile = thumbnailCard.files.single;
+        const thumbPath = `thumbnails/${Date.now()}_${thumbFile.name.replace(/\s+/g, '_')}`;
+        const thumbUrl = await uploadFileToSupabase(thumbFile, thumbPath, 'quizzes');
+
+        // Resolve linked IDs from titles
+        const qbItem = quickbooksList.find(x => x.title === selectedQuickbookId);
+        const fcItem = flashcardsList.find(x => x.title === selectedFlashcardDeckId);
+
+        // 2. Insert Quiz Record
+        const { data: quizData, error: quizError } = await supabase.from('quizzes').insert({
+          title: parsedMeta.title,
+          description: parsedMeta.description || '',
+          applicable_ages: ages.map(a => parseInt(a)),
+          thumbnail_url: thumbUrl,
+          question_count: parsedMeta.question_count || (parsedMeta.quiz_questions ? parsedMeta.quiz_questions.length : 0),
+          win_xp: parsedMeta.win_xp || 0,
+          category: parsedMeta.category || '',
+          linked_quickbook_id: qbItem ? qbItem.id : null,
+          linked_flashcard_deck_id: fcItem ? fcItem.id : null
+        }).select().single();
+
+        if (quizError) throw quizError;
+        const quizId = quizData.id;
+
+        // 3. Process Questions
+        if (parsedMeta.quiz_questions && Array.isArray(parsedMeta.quiz_questions)) {
+          let questionsInserted = 0;
+          for (const q of parsedMeta.quiz_questions) {
+            // Check if there is an image for this question based on order_index
+            const qFileGroup = groupedCards.find(c => c.number == q.order_index);
+            let qImageUrl = null;
+            if (qFileGroup && qFileGroup.files.single) {
+               const qFile = qFileGroup.files.single;
+               const qPath = `questions/${quizId}_${q.order_index}_${qFile.name.replace(/\s+/g, '_')}`;
+               qImageUrl = await uploadFileToSupabase(qFile, qPath, 'quizzes');
+            }
+
+            // Insert Question
+            const { data: qData, error: qError } = await supabase.from('quiz_questions').insert({
+               quiz_id: quizId,
+               question_text: q.question_text,
+               image_url: qImageUrl,
+               order_index: q.order_index
+            }).select().single();
+
+            if (qError) throw qError;
+            const questionId = qData.id;
+
+            // Insert Options
+            if (q.quiz_question_options && Array.isArray(q.quiz_question_options)) {
+               const optionsToInsert = q.quiz_question_options.map(opt => ({
+                  question_id: questionId,
+                  option_text: opt.option_text,
+                  is_correct: opt.is_correct,
+                  order_index: opt.order_index
+               }));
+
+               if (optionsToInsert.length > 0) {
+                 const { error: optError } = await supabase.from('quiz_question_options').insert(optionsToInsert);
+                 if (optError) throw optError;
+               }
+            }
+            questionsInserted++;
+          }
+          setSuccessMsg(`Successfully uploaded quiz "${parsedMeta.title}" with ${questionsInserted} questions!`);
+        } else {
+          setSuccessMsg(`Successfully uploaded quiz "${parsedMeta.title}"! (No questions provided)`);
+        }
       } else {
-        // Implement logic for Quizzes/Quickbooks later
         setSuccessMsg(`Uploaded ${files.length} files for ${contentType} (Logic placeholder)`);
       }
 
@@ -294,6 +419,40 @@ export default function UploadForm() {
               {CONTENT_TYPES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+
+          {contentType === 'Quizzes' && (
+            <>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Linked Quickbook (Optional)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  list="quickbooks-list" 
+                  placeholder="Search and select a quickbook..." 
+                  value={selectedQuickbookId}
+                  onChange={(e) => setSelectedQuickbookId(e.target.value)}
+                />
+                <datalist id="quickbooks-list">
+                  {quickbooksList.map(qb => <option key={qb.id} value={qb.title} />)}
+                </datalist>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Linked Flashcard Deck (Optional)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  list="flashcards-list" 
+                  placeholder="Search and select a flashcard deck..." 
+                  value={selectedFlashcardDeckId}
+                  onChange={(e) => setSelectedFlashcardDeckId(e.target.value)}
+                />
+                <datalist id="flashcards-list">
+                  {flashcardsList.map(fc => <option key={fc.id} value={fc.title} />)}
+                </datalist>
+              </div>
+            </>
+          )}
           
           <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
             <label className="form-label">Metadata (JSON)</label>
@@ -309,7 +468,7 @@ export default function UploadForm() {
         </div>
 
         <div className="form-group" style={{ marginTop: '0.5rem' }}>
-          <label className="form-label">Content Files {contentType === 'Flashcards' ? '(Must include t.png for Thumbnail)' : ''}</label>
+          <label className="form-label">Content Files {(contentType === 'Flashcards' || contentType === 'Quizzes') ? '(Must include t.png for Thumbnail)' : ''}</label>
           <div 
             style={{
               border: `2px dashed ${isDragging ? 'var(--primary)' : '#cbd5e1'}`,
@@ -326,7 +485,7 @@ export default function UploadForm() {
             <input 
               type="file" 
               id="file-upload" 
-              multiple={contentType === 'Flashcards'}
+              multiple={contentType === 'Flashcards' || contentType === 'Quizzes'}
               accept="image/png, image/jpeg"
               style={{ display: 'none' }}
               onChange={handleFileChange}
@@ -338,31 +497,31 @@ export default function UploadForm() {
               <div>
                 <span style={{ color: 'var(--primary)', fontWeight: '600' }}>Click to upload</span> or drag and drop
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                  {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' ? "Upload t.png (thumbnail) and 0.png, 1.png..." : "PDF, Image, or JSON")}
+                  {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' || contentType === 'Quizzes' ? "Upload t.png (thumbnail) and 0.png, 1.png..." : "PDF, Image, or JSON")}
                 </p>
               </div>
             </label>
           </div>
         </div>
 
-        {/* Flashcard Preview Section */}
-        {contentType === 'Flashcards' && groupedCards.length > 0 && (
+        {/* Flashcard/Quiz Preview Section */}
+        {(contentType === 'Flashcards' || contentType === 'Quizzes') && groupedCards.length > 0 && (
           <div style={{ marginTop: '2rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.1rem', color: 'var(--text-main)', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>Flashcard Previews</h3>
+            <h3 style={{ fontSize: '1.1rem', color: 'var(--text-main)', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>{contentType} Previews</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {groupedCards.map((card, idx) => (
                 <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1.5rem', backgroundColor: card.number === 't' ? '#f0fdf4' : '#f8fafc', borderRadius: 'var(--radius-md)', border: card.number === 't' ? '1px solid #86efac' : '1px solid #e2e8f0' }}>
                   
                   {card.number === 't' && (
-                    <div style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>Deck Thumbnail Image</div>
+                    <div style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{contentType === 'Quizzes' ? 'Quiz' : 'Deck'} Thumbnail Image</div>
                   )}
 
                   {/* Image Thumbnails */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center' }}>
                     {card.previews.single && (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                        <img src={card.previews.single} alt={`Card ${card.number}`} style={{ width: '280px', height: '280px', objectFit: 'contain', backgroundColor: 'white', borderRadius: 'var(--radius-sm)', border: '1px solid #cbd5e1', padding: '0.5rem', boxShadow: 'var(--shadow-sm)' }} />
-                        <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{card.number === 't' ? 'Thumbnail' : `Card ${card.number}`}</span>
+                        <img src={card.previews.single} alt={`Item ${card.number}`} style={{ width: '280px', height: '280px', objectFit: 'contain', backgroundColor: 'white', borderRadius: 'var(--radius-sm)', border: '1px solid #cbd5e1', padding: '0.5rem', boxShadow: 'var(--shadow-sm)' }} />
+                        <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{card.number === 't' ? 'Thumbnail' : (contentType === 'Quizzes' ? `Question ${card.number}` : `Card ${card.number}`)}</span>
                       </div>
                     )}
                     {card.previews.front && (
@@ -379,8 +538,8 @@ export default function UploadForm() {
                     )}
                   </div>
 
-                  {/* Card Type Dropdown (Only show for actual cards, not thumbnail) */}
-                  {card.number !== 't' && (
+                  {/* Card Type Dropdown (Only show for Flashcard actual cards, not thumbnail) */}
+                  {contentType === 'Flashcards' && card.number !== 't' && (
                     <div style={{ alignSelf: 'center', width: '100%', maxWidth: '300px' }}>
                       <label className="form-label" style={{ fontSize: '0.9rem', textAlign: 'center', display: 'block' }}>Card Type</label>
                       <select 
