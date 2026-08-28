@@ -352,7 +352,7 @@ export default function QuickBookCreator() {
 
   const addBox = () => {
     const newId = Date.now().toString();
-    const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 14, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordSpacingPx: 4, wordColors: {} };
+    const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 16, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordSpacingPx: 4, wordColors: {} };
     updateCurrentPage({ boxes: [...currentPage.boxes, newBox] });
     setActiveBoxId(newId);
     setActiveMaskId(null);
@@ -834,8 +834,8 @@ export default function QuickBookCreator() {
               <button onClick={() => updateBox(activeBox.id, { fontSizePx: 24, fontWeight: '800' })} style={{ flex: 1, padding: '8px', cursor: 'pointer', backgroundColor: '#eef2f5', border: '1px solid #ccc', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#333' }}>
                 Title (24px)
               </button>
-              <button onClick={() => updateBox(activeBox.id, { fontSizePx: 14, fontWeight: '600' })} style={{ flex: 1, padding: '8px', cursor: 'pointer', backgroundColor: '#eef2f5', border: '1px solid #ccc', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#333' }}>
-                Body (14px)
+              <button onClick={() => updateBox(activeBox.id, { fontSizePx: 16, fontWeight: '600' })} style={{ flex: 1, padding: '8px', cursor: 'pointer', backgroundColor: '#eef2f5', border: '1px solid #ccc', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#333' }}>
+                Body (16px)
               </button>
             </div>
 
