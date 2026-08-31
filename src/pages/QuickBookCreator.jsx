@@ -282,7 +282,18 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
 
 // --- MAIN CREATOR STUDIO COMPONENT ---
 export default function QuickBookCreator() {
-  const defaultMetaJson = `{\n  "title": "",\n  "description": "",\n  "subject": "Science",\n  "category": "",\n  "ages": [5, 6, 7]\n}`;
+  const defaultMetaJson = `{
+  "title": "",
+  "description": "",
+  "subject": "Science",
+  "applicable_ages": [5, 6, 7],
+  "is_starter_pack": false, 
+  "format_type": "trivia", 
+  "vibe": "calming",
+  "difficulty": "easy",
+  "page_count": 10,
+  "topic_tags": ["fun_facts", "space"] 
+}`;
   const [metaJson, setMetaJson] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [thumbnailObj, setThumbnailObj] = useState(null);
@@ -696,16 +707,38 @@ export default function QuickBookCreator() {
       alert("Invalid JSON format in Book Details.");
       return;
     }
-    const { title, subject, category, description, ages: applicableAges } = parsedMeta;
+    const { 
+      title, 
+      description, 
+      subject, 
+      applicable_ages, 
+      is_starter_pack, 
+      format_type, 
+      vibe, 
+      difficulty, 
+      page_count, 
+      topic_tags 
+    } = parsedMeta;
     
     if (!title || !title.trim()) { alert("Please enter a Title in the JSON."); return; }
-    if (!applicableAges || applicableAges.length === 0) { alert("Please provide at least one applicable age in the JSON."); return; }
+    if (!applicable_ages || applicable_ages.length === 0) { alert("Please provide at least one applicable age in the JSON."); return; }
 
     setIsSaving(true);
     try {
       const { data: qbData, error: qbError } = await supabase
         .from('quickbooks')
-        .insert({ title, subject, category, description, applicable_ages: applicableAges })
+        .insert({ 
+          title, 
+          description, 
+          subject, 
+          applicable_ages, 
+          is_starter_pack, 
+          format_type, 
+          vibe, 
+          difficulty, 
+          page_count, 
+          topic_tags 
+        })
         .select()
         .single();
 
