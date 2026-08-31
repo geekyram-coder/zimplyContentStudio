@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette } from 'lucide-react';
+import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
 
 // --- HELPER COMPONENT: FREE-FORM POLYGON MASK ---
@@ -339,6 +339,21 @@ export default function QuickBookCreator() {
       setActiveMaskId(null);
       setActiveSelection({ start: 0, end: 0, boxId: null });
     }
+  };
+
+  const removeSpread = () => {
+    if (pages.length <= 1) {
+      alert("Cannot remove the only spread.");
+      return;
+    }
+    const confirmDelete = window.confirm("Are you sure you want to remove this spread?");
+    if (!confirmDelete) return;
+
+    setPages(prev => prev.filter((_, index) => index !== currentPageIndex));
+    setCurrentPageIndex(prev => (prev >= pages.length - 1 ? Math.max(0, prev - 1) : prev));
+    setActiveBoxId(null);
+    setActiveMaskId(null);
+    setActiveSelection({ start: 0, end: 0, boxId: null });
   };
 
   const handleImageUpload = (e) => {
@@ -926,8 +941,18 @@ export default function QuickBookCreator() {
 
       {/* CENTER PANEL */}
       <div style={{ flex: 1, padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-        <h2 style={{ marginBottom: '20px' }}>Spread Editor (600x400)</h2>
-        <div style={{ width: '840px', height: '560px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '20px 0' }}>
+        <div style={{ width: '840px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0 }}>Spread Editor (600x400)</h2>
+          {pages.length > 1 && (
+            <button 
+              onClick={removeSpread}
+              style={{ padding: '8px 16px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              <Trash2 size={18} /> Remove Spread
+            </button>
+          )}
+        </div>
+        <div style={{ width: '840px', height: '560px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 0 20px 0' }}>
           <div 
             onMouseDown={(e) => {
               if (e.target === e.currentTarget || e.target.id === 'canvas-center-line') {
