@@ -66,7 +66,7 @@ export default function QuickBooksPage({ onLogout }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
             {quickbooks.map(qb => (
               <Link 
-                to={`/quickbook/${qb.id}`} 
+                to={`/quickbook/edit/${qb.id}`} 
                 key={qb.id} 
                 className="glass-card" 
                 style={{ textDecoration: 'none', color: 'inherit', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import DecksPage from './pages/DecksPage';
 import DeckViewPage from './pages/DeckViewPage';
 import QuickBookCreator from './pages/QuickBookCreator';
+import QuickBookEditor from './pages/QuickBookEditor';
 import QuickBooksPage from './pages/QuickBooksPage';
 import QuickBookViewPage from './pages/QuickBookViewPage';
 import { supabase } from './supabaseClient';
@@ -79,6 +80,10 @@ function App() {
           <Route 
             path="/quickbook/:id" 
             element={isLoggedIn ? <QuickBookViewPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/quickbook/edit/:id" 
+            element={isLoggedIn ? <QuickBookEditor onLogout={handleLogout} /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/quickbooks/create" 
