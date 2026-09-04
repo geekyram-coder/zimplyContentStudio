@@ -1025,9 +1025,20 @@ export default function QuickBookEditor() {
 
       {/* LEFT PANEL */}
       <div style={{ width: '300px', backgroundColor: '#fff', borderRight: '1px solid #ccc', display: 'flex', flexDirection: 'column', padding: '20px', zIndex: 10, overflowY: 'auto' }}>
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#123C52', fontWeight: 'bold', marginBottom: '20px' }}>
-          <ArrowLeft size={18} /> Back to Dashboard
-        </Link>
+        {(() => {
+          let subj = "Science";
+          let age = "5";
+          try {
+            const parsed = JSON.parse(metaJson);
+            if (parsed.subject) subj = parsed.subject;
+            if (parsed.applicable_ages && parsed.applicable_ages.length > 0) age = parsed.applicable_ages[0];
+          } catch (e) {}
+          return (
+            <Link to={`/quickbooks/${subj}/${age}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#123C52', fontWeight: 'bold', marginBottom: '20px' }}>
+              <ArrowLeft size={18} /> Back to Quickbooks
+            </Link>
+          );
+        })()}
 
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', border: '1px solid #eee', marginBottom: '25px' }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', borderBottom: '2px solid #ddd', paddingBottom: '8px', marginBottom: '15px' }}>
