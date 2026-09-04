@@ -79,7 +79,7 @@ function App() {
           />
           <Route 
             path="/quickbook/:id" 
-            element={isLoggedIn ? <QuickBookViewPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
+            element={isLoggedIn ? <QuickBookEditor onLogout={handleLogout} /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/quickbook/edit/:id" 

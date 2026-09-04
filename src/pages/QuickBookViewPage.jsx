@@ -87,8 +87,12 @@ export default function QuickBookViewPage({ onLogout }) {
                     {page.page_index}
                   </div>
                   
-                  <div style={{ flex: 1, fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                    {page.left_text}
+                  <div style={{ flex: 1, fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {Array.isArray(page.left_text) 
+                      ? page.left_text.filter(item => !item.isMask).map((item, i) => (
+                          <div key={i} dangerouslySetInnerHTML={{ __html: item.text }} />
+                        ))
+                      : String(page.left_text)}
                   </div>
 
                   {page.image_url && (
@@ -97,8 +101,12 @@ export default function QuickBookViewPage({ onLogout }) {
                     </div>
                   )}
 
-                  <div style={{ flex: 1, fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                    {page.right_text}
+                  <div style={{ flex: 1, fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {Array.isArray(page.right_text) 
+                      ? page.right_text.filter(item => !item.isMask).map((item, i) => (
+                          <div key={i} dangerouslySetInnerHTML={{ __html: item.text }} />
+                        ))
+                      : String(page.right_text)}
                   </div>
 
                   {page.audio_url && (
