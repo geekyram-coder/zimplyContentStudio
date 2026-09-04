@@ -463,6 +463,7 @@ export default function QuickBookEditor() {
             };
           });
           setPages(loadedPages);
+        }
       } catch (err) {
         console.error("Error loading quickbook", err);
       }
