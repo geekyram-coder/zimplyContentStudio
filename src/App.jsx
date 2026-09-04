@@ -5,6 +5,8 @@ import Dashboard from './pages/Dashboard';
 import DecksPage from './pages/DecksPage';
 import DeckViewPage from './pages/DeckViewPage';
 import QuickBookCreator from './pages/QuickBookCreator';
+import QuickBooksPage from './pages/QuickBooksPage';
+import QuickBookViewPage from './pages/QuickBookViewPage';
 import { supabase } from './supabaseClient';
 import './App.css';
 
@@ -69,6 +71,14 @@ function App() {
           <Route 
             path="/deck/:deckId" 
             element={isLoggedIn ? <DeckViewPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/quickbooks/:subject/:age" 
+            element={isLoggedIn ? <QuickBooksPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/quickbook/:id" 
+            element={isLoggedIn ? <QuickBookViewPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/quickbooks/create" 

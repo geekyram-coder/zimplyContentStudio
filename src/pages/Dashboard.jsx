@@ -39,13 +39,14 @@ const SUBJECT_ICONS = {
 export default function Dashboard({ onLogout }) {
   const [selectedAge, setSelectedAge] = useState('5');
   const [flashcardCounts, setFlashcardCounts] = useState({});
+  const [quickbookCounts, setQuickbookCounts] = useState({});
 
   useEffect(() => {
     async function fetchCounts() {
-      const { data, error } = await supabase.from('flashcard_decks').select('subject, applicable_ages');
-      if (error) {
-        console.error('Error fetching deck counts:', error);
-        return;
+      // Fetch Flashcards
+      const { data: fcData, error: fcError } = await supabase.from('flashcard_decks').select('subject, applicable_ages');
+      if (fcError) {
+        console.error('Error fetching deck counts:', fcError);
       }
       
       const counts = {};
@@ -56,8 +57,8 @@ export default function Dashboard({ onLogout }) {
         });
       });
       
-      if (data) {
-        data.forEach(deck => {
+      if (fcData) {
+        fcData.forEach(deck => {
           if (deck.applicable_ages && Array.isArray(deck.applicable_ages)) {
             deck.applicable_ages.forEach(ageNum => {
               const ageStr = ageNum.toString();
@@ -70,6 +71,34 @@ export default function Dashboard({ onLogout }) {
       }
       
       setFlashcardCounts(counts);
+
+      // Fetch Quickbooks
+      const { data: qbData, error: qbError } = await supabase.from('quickbooks').select('subject, applicable_ages');
+      if (qbError) {
+        console.error('Error fetching quickbooks counts:', qbError);
+      }
+      
+      const qbCounts = {};
+      AGES.forEach(age => {
+        qbCounts[age] = {};
+        Object.keys(SUBJECT_ICONS).forEach(subj => {
+          qbCounts[age][subj] = 0;
+        });
+      });
+      
+      if (qbData) {
+        qbData.forEach(qb => {
+          if (qb.applicable_ages && Array.isArray(qb.applicable_ages)) {
+            qb.applicable_ages.forEach(ageNum => {
+              const ageStr = ageNum.toString();
+              if (qbCounts[ageStr] && qbCounts[ageStr][qb.subject] !== undefined) {
+                qbCounts[ageStr][qb.subject] += 1;
+              }
+            });
+          }
+        });
+      }
+      setQuickbookCounts(qbCounts);
     }
     
     fetchCounts();
@@ -157,6 +186,7 @@ export default function Dashboard({ onLogout }) {
             {chartData.map((row, idx) => {
               const Icon = SUBJECT_ICONS[row.subject] || BookOpen;
               const realFlashcardCount = flashcardCounts[selectedAge]?.[row.subject] || 0;
+              const realQuickbookCount = quickbookCounts[selectedAge]?.[row.subject] || 0;
               return (
                 <div key={idx} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
                   {/* Subject Header */}
@@ -169,13 +199,13 @@ export default function Dashboard({ onLogout }) {
                   
                   {/* Subject Target Numbers */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                    <Link to="/quickbooks/create" style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}>
+                    <Link to={`/quickbooks/${row.subject}/${selectedAge}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
                         <BookOpen size={18} color="#6366f1" />
                         <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Quickbooks</span>
                       </div>
                       <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#6366f1' }}>
-                        {row.quickbooks} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 8</span>
+                        {realQuickbookCount} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 8</span>
                       </div>
                     </Link>
                     
