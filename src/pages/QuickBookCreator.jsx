@@ -306,7 +306,7 @@ export default function QuickBookCreator() {
   const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
-  const [draftId, setDraftId] = useState(searchParams.get('draftId') || `draft-${Date.now()}`);
+  const [draftId, setDraftId] = useState(() => searchParams.get('draftId') || `draft-${Date.now()}`);
   const [isDraftLoading, setIsDraftLoading] = useState(true);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
@@ -367,13 +367,12 @@ export default function QuickBookCreator() {
           setCurrentPageIndex(draftData.currentPageIndex);
         }
       } else {
-        // If it's a new draft, just set default meta
-        setMetaJson(defaultMetaJson);
+        // Leave metaJson empty so the placeholder shows through
       }
       setIsDraftLoading(false);
-      // Ensure the URL matches the draft ID
+      // Ensure the URL matches the draft ID without pushing to history loop
       if (!searchParams.get('draftId')) {
-        setSearchParams({ draftId });
+        setSearchParams({ draftId }, { replace: true });
       }
     }
     initDraft();
@@ -382,6 +381,18 @@ export default function QuickBookCreator() {
   // AUTO-SAVE DRAFT
   useEffect(() => {
     if (isDraftLoading) return;
+
+    // Check if the draft is completely empty (no edits at all)
+    const isEmpty = metaJson === '' && 
+                    thumbnailObj === null && 
+                    pages.length === 1 && 
+                    pages[0].bgImage === null && 
+                    pages[0].boxes.length === 0 && 
+                    pages[0].masks.length === 0 && 
+                    pages[0].audioUrl === null;
+
+    if (isEmpty) return; // Don't auto-save a blank canvas
+
     const timeout = setTimeout(() => {
       saveDraft(draftId, {
         metaJson,
