@@ -55,12 +55,55 @@ export default function DeckViewPage({ onLogout }) {
           <h1 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>{deck ? deck.title : 'Loading...'}</h1>
         </div>
         
-        <button 
-          onClick={onLogout}
-          style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
-        >
-          <LogOut size={20} />
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Update Thumbnail:</label>
+            <input 
+              type="file" 
+              accept="image/*" 
+              onChange={async (e) => {
+                if (!e.target.files || e.target.files.length === 0) return;
+                const file = e.target.files[0];
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${deckId}-thumbnail-${Date.now()}.${fileExt}`;
+                
+                try {
+                  const { error: uploadError } = await supabase.storage
+                    .from('flashcards')
+                    .upload(fileName, file);
+                    
+                  if (uploadError) throw uploadError;
+                  
+                  const { data: publicUrlData } = supabase.storage
+                    .from('flashcards')
+                    .getPublicUrl(fileName);
+                    
+                  const newThumbnailUrl = publicUrlData.publicUrl;
+                  
+                  const { error: updateError } = await supabase
+                    .from('flashcard_decks')
+                    .update({ thumbnail_url: newThumbnailUrl })
+                    .eq('id', deckId);
+                    
+                  if (updateError) throw updateError;
+                  
+                  setDeck(prev => ({ ...prev, thumbnail_url: newThumbnailUrl }));
+                  alert('Thumbnail updated successfully!');
+                } catch (err) {
+                  console.error('Error updating thumbnail:', err);
+                  alert('Failed to update thumbnail.');
+                }
+              }}
+              style={{ fontSize: '0.9rem' }}
+            />
+          </div>
+          <button 
+            onClick={onLogout}
+            style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       <main style={{ flex: 1, padding: '0 1.5rem 2rem 1.5rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
