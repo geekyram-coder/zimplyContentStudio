@@ -1172,13 +1172,26 @@ export default function QuickBookCreator() {
             </pre>
           </div>
 
-          <button 
-            onClick={handleSaveToDB} 
-            disabled={isSaving}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', marginTop: 'auto', backgroundColor: isSaving ? '#ccc' : '#27ae60', color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', cursor: isSaving ? 'not-allowed' : 'pointer' }}
-          >
-            {isSaving ? "Saving to Database..." : <><Save size={20} /> Publish Full Book</>}
-          </button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+            <button 
+              onClick={async () => {
+                const success = await saveDraft(draftId, { metaJson, thumbnailObj, pages, currentPageIndex });
+                if (success) alert('Draft saved successfully!');
+                else alert('Failed to save draft.');
+              }} 
+              disabled={isSaving}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', backgroundColor: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 'bold', cursor: isSaving ? 'not-allowed' : 'pointer', transition: 'background-color 0.2s' }}
+            >
+              <Save size={18} /> Save Draft
+            </button>
+            <button 
+              onClick={handleSaveToDB} 
+              disabled={isSaving}
+              style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', backgroundColor: isSaving ? '#ccc' : '#27ae60', color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', cursor: isSaving ? 'not-allowed' : 'pointer' }}
+            >
+              {isSaving ? "Saving..." : <><Save size={20} /> Publish Full Book</>}
+            </button>
+          </div>
         </div>
       </div>
     </div>
