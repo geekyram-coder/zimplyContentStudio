@@ -190,7 +190,7 @@ export default function Dashboard({ onLogout }) {
                   </div>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{draft.pageCount} Pages • Saved {new Date(draft.updatedAt).toLocaleTimeString()}</p>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <Link to={`/quickbook/create?draftId=${draft.id}`} style={{ flex: 1, textAlign: 'center', backgroundColor: 'var(--primary)', color: 'white', padding: '0.5rem', borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>Resume</Link>
+                    <Link to={`/quickbooks/create?draftId=${draft.id}`} style={{ flex: 1, textAlign: 'center', backgroundColor: 'var(--primary)', color: 'white', padding: '0.5rem', borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>Resume</Link>
                     <button onClick={async () => {
                       const { deleteDraft } = await import('../utils/draftManager');
                       await deleteDraft(draft.id);
