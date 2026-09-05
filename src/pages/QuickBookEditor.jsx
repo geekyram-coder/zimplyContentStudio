@@ -450,6 +450,7 @@ export default function QuickBookEditor() {
             processSide(pg.right_text, false);
 
             return {
+              dbId: pg.id,
               id: `page-${pg.page_index}`,
               bgImage: pg.image_url,
               fileObj: null,
@@ -884,7 +885,7 @@ export default function QuickBookEditor() {
       let qbData;
       
       if (quickbookId) {
-        const { data: updatedQbData, error: qbError } = await supabase
+        const { error: qbError } = await supabase
           .from('quickbooks')
           .update({ 
             title, 
@@ -898,15 +899,11 @@ export default function QuickBookEditor() {
             page_count, 
             topic_tags 
           })
-          .eq('id', quickbookId)
-          .select()
-          .single();
+          .eq('id', quickbookId);
           
         if (qbError) throw qbError;
-        qbData = updatedQbData;
+        qbData = { id: quickbookId };
         
-        // Delete existing pages
-        await supabase.from('quickbook_pages').delete().eq('quickbook_id', quickbookId);
       } else {
         const { data: newQbData, error: qbError } = await supabase
           .from('quickbooks')
@@ -993,7 +990,7 @@ export default function QuickBookEditor() {
            finalAudioUrl = publicAudioUrlData.publicUrl;
         }
 
-        pagesPayload.push({
+        const payload = {
           quickbook_id: qbData.id,
           page_index: i,
           image_url: finalImageUrl,
@@ -1001,14 +998,29 @@ export default function QuickBookEditor() {
           right_text: extracted.rightText,
           audio_url: finalAudioUrl,
           audio_timings: extracted.timingArray
-        });
+        };
+        if (p.dbId) {
+          payload.id = p.dbId;
+        }
+        pagesPayload.push(payload);
       }
 
       const { error: pagesError } = await supabase
         .from('quickbook_pages')
-        .insert(pagesPayload);
+        .upsert(pagesPayload);
 
       if (pagesError) throw pagesError;
+
+      // Clean up pages that were deleted in the editor
+      if (quickbookId) {
+        const payloadIds = pagesPayload.map(p => p.id).filter(id => id !== undefined);
+        if (payloadIds.length > 0) {
+          await supabase.from('quickbook_pages').delete().eq('quickbook_id', quickbookId).not('id', 'in', payloadIds);
+        } else {
+          // If all pages were deleted, just clear them all
+          await supabase.from('quickbook_pages').delete().eq('quickbook_id', quickbookId);
+        }
+      }
 
       alert(`Success! "${title}" and its ${pages.length} pages have been ${quickbookId ? 'updated' : 'saved'} in the database.`);
     } catch (error) {
