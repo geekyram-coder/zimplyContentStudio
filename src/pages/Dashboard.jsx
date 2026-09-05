@@ -86,7 +86,7 @@ export default function Dashboard({ onLogout }) {
         });
       });
       
-      if (qbData) {
+      if (qbData && qbData.length > 0) {
         qbData.forEach(qb => {
           if (qb.applicable_ages && Array.isArray(qb.applicable_ages)) {
             qb.applicable_ages.forEach(ageNum => {
@@ -102,6 +102,14 @@ export default function Dashboard({ onLogout }) {
     }
     
     fetchCounts();
+  }, []);
+
+  const [drafts, setDrafts] = useState([]);
+  
+  useEffect(() => {
+    import('../utils/draftManager').then(({ getAllDrafts }) => {
+      getAllDrafts().then(setDrafts);
+    });
   }, []);
 
   // Fallback to empty array if no specific mock data for selected age
@@ -168,6 +176,32 @@ export default function Dashboard({ onLogout }) {
         <div className="animate-fade-in delay-1" style={{ marginBottom: '2rem' }}>
           <UploadForm />
         </div>
+
+        {/* Drafts Section */}
+        {drafts.length > 0 && (
+          <div className="animate-fade-in delay-1" style={{ marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-main)', marginBottom: '1rem' }}>Saved Drafts</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {drafts.map(draft => (
+                <div key={draft.id} className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{draft.title}</h3>
+                    <span style={{ fontSize: '0.75rem', backgroundColor: '#e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '1rem', color: 'var(--text-muted)' }}>{draft.subject}</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{draft.pageCount} Pages • Saved {new Date(draft.updatedAt).toLocaleTimeString()}</p>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <Link to={`/quickbook/create?draftId=${draft.id}`} style={{ flex: 1, textAlign: 'center', backgroundColor: 'var(--primary)', color: 'white', padding: '0.5rem', borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>Resume</Link>
+                    <button onClick={async () => {
+                      const { deleteDraft } = await import('../utils/draftManager');
+                      await deleteDraft(draft.id);
+                      setDrafts(drafts.filter(d => d.id !== draft.id));
+                    }} style={{ backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', padding: '0.5rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Overview Section */}
         <div className="animate-fade-in delay-2">

@@ -281,7 +281,11 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
 };
 
 // --- MAIN CREATOR STUDIO COMPONENT ---
+import { useSearchParams } from 'react-router-dom';
+import { saveDraft, loadDraft, deleteDraft } from '../utils/draftManager';
+
 export default function QuickBookCreator() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const defaultMetaJson = `{
   "title": "",
   "description": "",
@@ -301,6 +305,9 @@ export default function QuickBookCreator() {
 
   const [pages, setPages] = useState([{ id: 'page-0', bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' }]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+  const [draftId, setDraftId] = useState(searchParams.get('draftId') || `draft-${Date.now()}`);
+  const [isDraftLoading, setIsDraftLoading] = useState(true);
   
   const [activeBoxId, setActiveBoxId] = useState(null);
   const [activeMaskId, setActiveMaskId] = useState(null);
@@ -318,10 +325,73 @@ export default function QuickBookCreator() {
 
   useEffect(() => {
     return () => pagesRef.current.forEach(p => { 
-      if (p.bgImage) URL.revokeObjectURL(p.bgImage); 
-      if (p.audioUrl) URL.revokeObjectURL(p.audioUrl);
+      if (p.bgImage && p.bgImage.startsWith('blob:')) URL.revokeObjectURL(p.bgImage);
+      if (p.audioUrl && p.audioUrl.startsWith('blob:')) URL.revokeObjectURL(p.audioUrl);
     });
   }, []);
+
+  // INITIAL LOAD OF DRAFT
+  useEffect(() => {
+    async function initDraft() {
+      const draftData = await loadDraft(draftId);
+      if (draftData) {
+        if (draftData.metaJson) setMetaJson(draftData.metaJson);
+        if (draftData.thumbnailObj) {
+          setThumbnailObj(draftData.thumbnailObj);
+          setThumbnailUrl(URL.createObjectURL(draftData.thumbnailObj));
+        } else if (draftData.thumbnailUrl) {
+          setThumbnailUrl(draftData.thumbnailUrl);
+        }
+        if (draftData.pages && draftData.pages.length > 0) {
+          // Recreate blob URLs for file objects
+          const restoredPages = draftData.pages.map(p => {
+            let restoredBg = p.bgImage;
+            let restoredAudioUrl = p.audioUrl;
+            if (p.fileObj) {
+               // We don't recreate blob if it was already stored, wait, Blobs can't be used across sessions directly by URL, 
+               // but localforage stores the actual File/Blob object! So we must create new ObjectURLs for them.
+               restoredBg = URL.createObjectURL(p.fileObj);
+            }
+            if (p.audioFileObj) {
+               restoredAudioUrl = URL.createObjectURL(p.audioFileObj);
+            }
+            return {
+              ...p,
+              bgImage: restoredBg,
+              audioUrl: restoredAudioUrl
+            };
+          });
+          setPages(restoredPages);
+        }
+        if (draftData.currentPageIndex !== undefined) {
+          setCurrentPageIndex(draftData.currentPageIndex);
+        }
+      } else {
+        // If it's a new draft, just set default meta
+        setMetaJson(defaultMetaJson);
+      }
+      setIsDraftLoading(false);
+      // Ensure the URL matches the draft ID
+      if (!searchParams.get('draftId')) {
+        setSearchParams({ draftId });
+      }
+    }
+    initDraft();
+  }, []);
+
+  // AUTO-SAVE DRAFT
+  useEffect(() => {
+    if (isDraftLoading) return;
+    const timeout = setTimeout(() => {
+      saveDraft(draftId, {
+        metaJson,
+        thumbnailObj,
+        pages,
+        currentPageIndex
+      });
+    }, 1000); // 1s debounce
+    return () => clearTimeout(timeout);
+  }, [metaJson, thumbnailObj, pages, currentPageIndex, draftId, isDraftLoading]);
 
   useEffect(() => {
     return () => {
@@ -824,6 +894,9 @@ export default function QuickBookCreator() {
         .insert(pagesPayload);
 
       if (pagesError) throw pagesError;
+
+      // Clear the draft from indexedDB successfully!
+      await deleteDraft(draftId);
 
       alert(`Success! "${title}" and its ${pages.length} pages have been saved to the database.`);
     } catch (error) {
