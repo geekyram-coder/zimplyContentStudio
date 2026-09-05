@@ -839,6 +839,8 @@ export default function QuickBookEditor() {
 
           leftBoxes.forEach((box, idx) => processBlock(box, 0, idx));
           rightBoxes.forEach((box, idx) => processBlock(box, 1, idx));
+        } else if (newAudioData.timingArray) {
+          timingArray.push(...newAudioData.timingArray);
         }
       }
     } catch (e) { }
