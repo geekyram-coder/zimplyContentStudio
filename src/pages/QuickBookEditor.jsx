@@ -348,6 +348,9 @@ export default function QuickBookEditor() {
             topic_tags: qb.topic_tags || ["fun_facts", "space"]
           };
           setMetaJson(JSON.stringify(loadedMeta, null, 2));
+          if (qb.thumbnail_url) {
+            setThumbnailUrl(qb.thumbnail_url);
+          }
         }
 
         const { data: pgData, error: pgError } = await supabase
