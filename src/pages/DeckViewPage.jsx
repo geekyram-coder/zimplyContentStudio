@@ -44,6 +44,44 @@ export default function DeckViewPage({ onLogout }) {
     fetchDeckAndCards();
   }, [deckId]);
 
+  const [isDraggingThumb, setIsDraggingThumb] = useState(false);
+  const [isUploadingThumb, setIsUploadingThumb] = useState(false);
+
+  const handleThumbnailUpload = async (file) => {
+    setIsUploadingThumb(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${deckId}-thumbnail-${Date.now()}.${fileExt}`;
+    
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('flashcards')
+        .upload(fileName, file);
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: publicUrlData } = supabase.storage
+        .from('flashcards')
+        .getPublicUrl(fileName);
+        
+      const newThumbnailUrl = publicUrlData.publicUrl;
+      
+      const { error: updateError } = await supabase
+        .from('flashcard_decks')
+        .update({ thumbnail_url: newThumbnailUrl })
+        .eq('id', deckId);
+        
+      if (updateError) throw updateError;
+      
+      setDeck(prev => ({ ...prev, thumbnail_url: newThumbnailUrl }));
+    } catch (err) {
+      console.error('Error updating thumbnail:', err);
+      alert('Failed to update thumbnail.');
+    } finally {
+      setIsUploadingThumb(false);
+      setIsDraggingThumb(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <header className="glass" style={{ margin: '1.5rem', padding: '1rem 2rem', borderRadius: 'var(--radius-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -55,55 +93,12 @@ export default function DeckViewPage({ onLogout }) {
           <h1 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>{deck ? deck.title : 'Loading...'}</h1>
         </div>
         
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Update Thumbnail:</label>
-            <input 
-              type="file" 
-              accept="image/*" 
-              onChange={async (e) => {
-                if (!e.target.files || e.target.files.length === 0) return;
-                const file = e.target.files[0];
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${deckId}-thumbnail-${Date.now()}.${fileExt}`;
-                
-                try {
-                  const { error: uploadError } = await supabase.storage
-                    .from('flashcards')
-                    .upload(fileName, file);
-                    
-                  if (uploadError) throw uploadError;
-                  
-                  const { data: publicUrlData } = supabase.storage
-                    .from('flashcards')
-                    .getPublicUrl(fileName);
-                    
-                  const newThumbnailUrl = publicUrlData.publicUrl;
-                  
-                  const { error: updateError } = await supabase
-                    .from('flashcard_decks')
-                    .update({ thumbnail_url: newThumbnailUrl })
-                    .eq('id', deckId);
-                    
-                  if (updateError) throw updateError;
-                  
-                  setDeck(prev => ({ ...prev, thumbnail_url: newThumbnailUrl }));
-                  alert('Thumbnail updated successfully!');
-                } catch (err) {
-                  console.error('Error updating thumbnail:', err);
-                  alert('Failed to update thumbnail.');
-                }
-              }}
-              style={{ fontSize: '0.9rem' }}
-            />
-          </div>
-          <button 
-            onClick={onLogout}
-            style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
-          >
-            <LogOut size={20} />
-          </button>
-        </div>
+        <button 
+          onClick={onLogout}
+          style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
+        >
+          <LogOut size={20} />
+        </button>
       </header>
 
       <main style={{ flex: 1, padding: '0 1.5rem 2rem 1.5rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
@@ -113,6 +108,44 @@ export default function DeckViewPage({ onLogout }) {
           <div style={{ textAlign: 'center', marginTop: '3rem', color: 'var(--error)' }}>Deck not found.</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem' }}>
+            
+            <div 
+              className="glass-card" 
+              style={{ 
+                padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
+                border: isDraggingThumb ? '2px dashed var(--primary)' : '1px solid transparent',
+                backgroundColor: isDraggingThumb ? 'rgba(38, 184, 245, 0.1)' : 'white'
+              }}
+              onDragOver={(e) => { e.preventDefault(); setIsDraggingThumb(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setIsDraggingThumb(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingThumb(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleThumbnailUpload(e.dataTransfer.files[0]);
+                }
+              }}
+            >
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Deck Thumbnail</span>
+              <label style={{ width: '100%', aspectRatio: '1/1', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleThumbnailUpload(e.target.files[0]); }} />
+                
+                {isUploadingThumb ? (
+                  <span style={{ color: 'var(--text-muted)' }}>Uploading...</span>
+                ) : deck.thumbnail_url ? (
+                  <>
+                    <img src={deck.thumbnail_url} alt="Thumbnail" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.8rem', padding: '0.5rem', textAlign: 'center' }}>Click or Drop to Update</div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>
+                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>Update Thumbnail</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem' }}>Click or Drop Image</p>
+                  </div>
+                )}
+              </label>
+            </div>
+
             {cards.map(card => (
               <div key={card.id} className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                 <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Card {card.order_index}</span>
