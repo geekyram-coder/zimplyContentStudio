@@ -72,7 +72,11 @@ export default function QuickBooksPage({ onLogout }) {
                 style={{ textDecoration: 'none', color: 'inherit', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
               >
                 <div style={{ width: '100%', aspectRatio: '2/3', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BookOpen size={48} color="#94a3b8" />
+                  {qb.thumbnail_url ? (
+                    <img src={qb.thumbnail_url} alt={qb.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <BookOpen size={48} color="#94a3b8" />
+                  )}
                 </div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', textAlign: 'center' }}>{qb.title}</h3>
                 <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', textAlign: 'center' }}>{qb.description}</p>
