@@ -4,7 +4,7 @@ import { UploadCloud, CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 
-const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes'];
+const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes', 'Free Questions'];
 const FLASHCARD_TYPES = ['Cover Card', 'Story Card', 'Think Card', 'Guess Card', 'Celebration Card', 'Imagination Card', 'Challenge Card'];
 
 export default function UploadForm() {
@@ -169,7 +169,7 @@ export default function UploadForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (files.length === 0) {
+    if (files.length === 0 && contentType !== 'Free Questions') {
       alert("Please select files to upload.");
       return;
     }
@@ -187,15 +187,17 @@ export default function UploadForm() {
       return;
     }
     
-    if (!parsedMeta.title || parsedMeta.title.trim() === "") {
-      alert("Please enter a valid title in the JSON.");
-      return;
-    }
+    if (contentType !== 'Free Questions') {
+      if (!parsedMeta.title || parsedMeta.title.trim() === "") {
+        alert("Please enter a valid title in the JSON.");
+        return;
+      }
 
-    const ages = parsedMeta.ageApplicability || parsedMeta.applicable_ages;
-    if (!ages || ages.length === 0) {
-      alert("Please include at least one age in ageApplicability or applicable_ages array.");
-      return;
+      const ages = parsedMeta.ageApplicability || parsedMeta.applicable_ages;
+      if (!ages || ages.length === 0) {
+        alert("Please include at least one age in ageApplicability or applicable_ages array.");
+        return;
+      }
     }
     
     setIsUploading(true);
@@ -366,6 +368,18 @@ export default function UploadForm() {
         } else {
           setSuccessMsg(`Successfully uploaded quiz "${parsedMeta.title}"! (No questions provided)`);
         }
+      } else if (contentType === 'Free Questions') {
+        if (!Array.isArray(parsedMeta)) {
+          throw new Error("For Free Questions, the metadata must be an array of questions.");
+        }
+        if (parsedMeta.length === 0) {
+          throw new Error("The questions array is empty.");
+        }
+        
+        const { error: insertError } = await supabase.from('free_questions').insert(parsedMeta);
+        if (insertError) throw insertError;
+        
+        setSuccessMsg(`Successfully uploaded ${parsedMeta.length} free questions!`);
       } else {
         setSuccessMsg(`Uploaded ${files.length} files for ${contentType} (Logic placeholder)`);
       }
@@ -461,48 +475,50 @@ export default function UploadForm() {
               style={{ minHeight: '160px', fontFamily: 'monospace', whiteSpace: 'pre', padding: '1rem', resize: 'vertical' }}
               value={metadataJson}
               onChange={(e) => setMetadataJson(e.target.value)}
-              placeholder={contentType === 'Quizzes' ? '{\n  "title": "Wonders of the Solar System",\n  "description": "Test your knowledge about the planets and stars in our solar system!",\n  "applicable_ages": [6, 7, 8, 9, 10],\n  "question_count": 2,\n  "win_xp": 150,\n  "category": "Science",\n  "quiz_questions": [\n    {\n      "question_text": "Which planet is known as the Red Planet?",\n      "order_index": 0,\n      "quiz_question_options": [\n        {\n          "option_text": "Venus",\n          "is_correct": false,\n          "order_index": 0\n        },\n        {\n          "option_text": "Mars",\n          "is_correct": true,\n          "order_index": 1\n        }\n      ]\n    }\n  ]\n}' : '{\n  "title": "Enter deck title...",\n  "subject": "e.g. Science",\n  "category": "e.g. Earth & Nature",\n  "ageApplicability": [5, 6],\n  "description": "Enter description here...",\n  "cardData": {\n    "1": {\n      "question": "Which animal is the largest land mammal?",\n      "options": [\n        { "id": "opt_1", "text": "Elephant" },\n        { "id": "opt_2", "text": "Giraffe" },\n        { "id": "opt_3", "text": "Rhino" }\n      ],\n      "correct_option_id": "opt_1"\n    },\n    "3": {\n      "question": "Guess the animal by its shadow!",\n      "options": [\n        { "id": "opt_1", "text": "Lion" },\n        { "id": "opt_2", "text": "Tiger" }\n      ],\n      "correct_option_id": "opt_1"\n    }\n  }\n}'}
+              placeholder={contentType === 'Free Questions' ? '[\n  {\n    "subject": "science",\n    "age_group": [5],\n    "payload": {\n      "question_text": "What covers a cat\'s body?",\n      "explanation": "Cats have soft fur covering their body.",\n      "options": [\n        { "is_correct": false, "option_text": "Feathers" },\n        { "is_correct": true, "option_text": "Fur" },\n        { "is_correct": false, "option_text": "Scales" }\n      ]\n    }\n  }\n]' : (contentType === 'Quizzes' ? '{\n  "title": "Wonders of the Solar System",\n  "description": "Test your knowledge about the planets and stars in our solar system!",\n  "applicable_ages": [6, 7, 8, 9, 10],\n  "question_count": 2,\n  "win_xp": 150,\n  "category": "Science",\n  "quiz_questions": [\n    {\n      "question_text": "Which planet is known as the Red Planet?",\n      "order_index": 0,\n      "quiz_question_options": [\n        {\n          "option_text": "Venus",\n          "is_correct": false,\n          "order_index": 0\n        },\n        {\n          "option_text": "Mars",\n          "is_correct": true,\n          "order_index": 1\n        }\n      ]\n    }\n  ]\n}' : '{\n  "title": "Enter deck title...",\n  "subject": "e.g. Science",\n  "category": "e.g. Earth & Nature",\n  "ageApplicability": [5, 6],\n  "description": "Enter description here...",\n  "cardData": {\n    "1": {\n      "question": "Which animal is the largest land mammal?",\n      "options": [\n        { "id": "opt_1", "text": "Elephant" },\n        { "id": "opt_2", "text": "Giraffe" },\n        { "id": "opt_3", "text": "Rhino" }\n      ],\n      "correct_option_id": "opt_1"\n    },\n    "3": {\n      "question": "Guess the animal by its shadow!",\n      "options": [\n        { "id": "opt_1", "text": "Lion" },\n        { "id": "opt_2", "text": "Tiger" }\n      ],\n      "correct_option_id": "opt_1"\n    }\n  }\n}')}
             />
           </div>
           
         </div>
 
-        <div className="form-group" style={{ marginTop: '0.5rem' }}>
-          <label className="form-label">Content Files {(contentType === 'Flashcards' || contentType === 'Quizzes') ? '(Must include t.png for Thumbnail)' : ''}</label>
-          <div 
-            style={{
-              border: `2px dashed ${isDragging ? 'var(--primary)' : '#cbd5e1'}`,
-              borderRadius: 'var(--radius-md)',
-              padding: '2rem',
-              textAlign: 'center',
-              backgroundColor: isDragging ? '#f0f9ff' : '#f8fafc',
-              transition: 'all 0.3s'
-            }}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <input 
-              type="file" 
-              id="file-upload" 
-              multiple={contentType === 'Flashcards' || contentType === 'Quizzes'}
-              accept="image/png, image/jpeg"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-            <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ backgroundColor: '#e2e8f0', padding: '1rem', borderRadius: '50%' }}>
-                <UploadCloud size={32} color="#64748b" />
-              </div>
-              <div>
-                <span style={{ color: 'var(--primary)', fontWeight: '600' }}>Click to upload</span> or drag and drop
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                  {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' || contentType === 'Quizzes' ? "Upload t.png (thumbnail) and 0.png, 1.png..." : "PDF, Image, or JSON")}
-                </p>
-              </div>
-            </label>
+        {contentType !== 'Free Questions' && (
+          <div className="form-group" style={{ marginTop: '0.5rem' }}>
+            <label className="form-label">Content Files {(contentType === 'Flashcards' || contentType === 'Quizzes') ? '(Must include t.png for Thumbnail)' : ''}</label>
+            <div 
+              style={{
+                border: `2px dashed ${isDragging ? 'var(--primary)' : '#cbd5e1'}`,
+                borderRadius: 'var(--radius-md)',
+                padding: '2rem',
+                textAlign: 'center',
+                backgroundColor: isDragging ? '#f0f9ff' : '#f8fafc',
+                transition: 'all 0.3s'
+              }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <input 
+                type="file" 
+                id="file-upload" 
+                multiple={contentType === 'Flashcards' || contentType === 'Quizzes'}
+                accept="image/png, image/jpeg"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+              <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ backgroundColor: '#e2e8f0', padding: '1rem', borderRadius: '50%' }}>
+                  <UploadCloud size={32} color="#64748b" />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--primary)', fontWeight: '600' }}>Click to upload</span> or drag and drop
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                    {files.length > 0 ? `${files.length} file(s) selected` : (contentType === 'Flashcards' || contentType === 'Quizzes' ? "Upload t.png (thumbnail) and 0.png, 1.png..." : "PDF, Image, or JSON")}
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Flashcard/Quiz Preview Section */}
         {(contentType === 'Flashcards' || contentType === 'Quizzes') && groupedCards.length > 0 && (
