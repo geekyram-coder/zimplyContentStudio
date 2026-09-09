@@ -187,13 +187,14 @@ export default function UploadForm() {
       return;
     }
     
+    let ages = [];
     if (contentType !== 'Free Questions') {
       if (!parsedMeta.title || parsedMeta.title.trim() === "") {
         alert("Please enter a valid title in the JSON.");
         return;
       }
 
-      const ages = parsedMeta.ageApplicability || parsedMeta.applicable_ages;
+      ages = parsedMeta.ageApplicability || parsedMeta.applicable_ages;
       if (!ages || ages.length === 0) {
         alert("Please include at least one age in ageApplicability or applicable_ages array.");
         return;
