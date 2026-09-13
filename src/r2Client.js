@@ -18,10 +18,13 @@ export const s3Client = new S3Client({
  * Uploads a file (File or Blob) to R2 and returns the public URL.
  */
 export const uploadFileToR2 = async (fileOrBlob, key, contentType) => {
+  const arrayBuffer = await fileOrBlob.arrayBuffer();
+  const bodyData = new Uint8Array(arrayBuffer);
+
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
-    Body: fileOrBlob,
+    Body: bodyData,
     ContentType: contentType || fileOrBlob.type,
   });
 
