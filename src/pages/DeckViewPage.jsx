@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { ArrowLeft, LogOut } from 'lucide-react';
+import { uploadFileToR2 } from '../r2Client';
+import { resizeImageToPng } from '../utils/imageProcessing';
+
 
 export default function DeckViewPage({ onLogout }) {
   const { deckId } = useParams();
@@ -51,19 +54,17 @@ export default function DeckViewPage({ onLogout }) {
     setIsUploadingThumb(true);
     const fileExt = file.name.split('.').pop();
     const fileName = `${deckId}-thumbnail-${Date.now()}.${fileExt}`;
+    const originalKey = `flashcards/thumbnails/${fileName}`;
     
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('flashcards')
-        .upload(fileName, file);
-        
-      if (uploadError) throw uploadError;
+      await uploadFileToR2(file, originalKey, file.type);
       
-      const { data: publicUrlData } = supabase.storage
-        .from('flashcards')
-        .getPublicUrl(fileName);
-        
-      const newThumbnailUrl = publicUrlData.publicUrl;
+      const resizedBlob = await resizeImageToPng(file);
+      const lastDotIdx = originalKey.lastIndexOf('.');
+      const baseKey = lastDotIdx > -1 ? originalKey.substring(0, lastDotIdx) : originalKey;
+      const derivedKey = `derived/w720/${baseKey}.png`;
+      
+      const newThumbnailUrl = await uploadFileToR2(resizedBlob, derivedKey, 'image/png');
       
       const { error: updateError } = await supabase
         .from('flashcard_decks')

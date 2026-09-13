@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud, CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { uploadFileToR2 } from '../r2Client';
+import { resizeImageToPng } from '../utils/imageProcessing';
 
 
 const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes', 'Free Questions'];
@@ -160,12 +162,21 @@ export default function UploadForm() {
     setGroupedCards(updated);
   };
 
-  const uploadFileToSupabase = async (file, path, bucket = 'flashcards') => {
-    const { data, error } = await supabase.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: false });
-    if (error) throw error;
-    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(path);
-    return publicUrlData.publicUrl;
+  const uploadFileToSupabase = async (file, path, bucketFolder = 'flashcards') => {
+    // 1. Upload original to R2
+    const originalKey = `${bucketFolder}/${path}`;
+    await uploadFileToR2(file, originalKey, file.type);
+    
+    // 2. Derive 720px PNG and upload
+    const resizedBlob = await resizeImageToPng(file);
+    const lastDotIdx = originalKey.lastIndexOf('.');
+    const baseKey = lastDotIdx > -1 ? originalKey.substring(0, lastDotIdx) : originalKey;
+    const derivedKey = `derived/w720/${baseKey}.png`;
+    
+    const derivedUrl = await uploadFileToR2(resizedBlob, derivedKey, 'image/png');
+    return derivedUrl;
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

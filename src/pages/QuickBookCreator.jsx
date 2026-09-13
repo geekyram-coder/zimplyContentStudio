@@ -2,6 +2,8 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
+import { uploadFileToR2 } from '../r2Client';
+import { resizeImageToPng } from '../utils/imageProcessing';
 
 // --- HELPER COMPONENT: FREE-FORM POLYGON MASK ---
 const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }) => {
@@ -828,20 +830,20 @@ export default function QuickBookCreator() {
       if (thumbnailObj) {
         const fileExt = thumbnailObj.name.split('.').pop();
         const fileName = `${qbData.id}-thumbnail.${fileExt}`;
+        const originalKey = `quickbook_images/${fileName}`;
         
-        const { error: uploadError } = await supabase.storage
-          .from('quickbook_images')
-          .upload(fileName, thumbnailObj);
-          
-        if (uploadError) throw uploadError;
+        await uploadFileToR2(thumbnailObj, originalKey, thumbnailObj.type);
         
-        const { data: publicUrlData } = supabase.storage
-          .from('quickbook_images')
-          .getPublicUrl(fileName);
+        const resizedBlob = await resizeImageToPng(thumbnailObj);
+        const lastDotIdx = originalKey.lastIndexOf('.');
+        const baseKey = lastDotIdx > -1 ? originalKey.substring(0, lastDotIdx) : originalKey;
+        const derivedKey = `derived/w720/${baseKey}.png`;
+        
+        const derivedUrl = await uploadFileToR2(resizedBlob, derivedKey, 'image/png');
           
         const { error: updateError } = await supabase
           .from('quickbooks')
-          .update({ thumbnail_url: publicUrlData.publicUrl })
+          .update({ thumbnail_url: derivedUrl })
           .eq('id', qbData.id);
           
         if (updateError) throw updateError;
@@ -858,35 +860,24 @@ export default function QuickBookCreator() {
         if (p.fileObj) {
            const fileExt = p.fileObj.name.split('.').pop();
            const fileName = `${qbData.id}-page-${i}.${fileExt}`;
+           const originalKey = `quickbook_images/${fileName}`;
            
-           const { error: uploadError } = await supabase.storage
-             .from('quickbook_images')
-             .upload(fileName, p.fileObj);
-             
-           if (uploadError) throw uploadError;
+           await uploadFileToR2(p.fileObj, originalKey, p.fileObj.type);
            
-           const { data: publicUrlData } = supabase.storage
-             .from('quickbook_images')
-             .getPublicUrl(fileName);
-             
-           finalImageUrl = publicUrlData.publicUrl;
+           const resizedBlob = await resizeImageToPng(p.fileObj);
+           const lastDotIdx = originalKey.lastIndexOf('.');
+           const baseKey = lastDotIdx > -1 ? originalKey.substring(0, lastDotIdx) : originalKey;
+           const derivedKey = `derived/w720/${baseKey}.png`;
+           
+           finalImageUrl = await uploadFileToR2(resizedBlob, derivedKey, 'image/png');
         }
 
         if (p.audioFileObj) {
            const audioExt = p.audioFileObj.name.split('.').pop();
            const audioName = `${qbData.id}-audio-${i}.${audioExt}`;
+           const originalKey = `quickbook_audio/${audioName}`;
            
-           const { error: audioUploadError } = await supabase.storage
-             .from('quickbook_audio')
-             .upload(audioName, p.audioFileObj);
-             
-           if (audioUploadError) throw audioUploadError;
-           
-           const { data: publicAudioUrlData } = supabase.storage
-             .from('quickbook_audio')
-             .getPublicUrl(audioName);
-             
-           finalAudioUrl = publicAudioUrlData.publicUrl;
+           finalAudioUrl = await uploadFileToR2(p.audioFileObj, originalKey, p.audioFileObj.type);
         }
 
         pagesPayload.push({
