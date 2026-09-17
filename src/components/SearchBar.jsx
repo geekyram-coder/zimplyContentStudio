@@ -7,11 +7,11 @@ const mockTopics = [
   { id: 2, title: 'Gravity discovered by Newton', subject: 'Science', age: '8', type: 'Quickbooks', icon: FileText },
   { id: 3, title: 'What is Gravity? Quiz', subject: 'Science', age: '6', type: 'Quizzes', icon: CheckSquare },
   { id: 4, title: 'Solar System Planets', subject: 'Science', age: '7', type: 'Quickbooks', icon: FileText },
-  { id: 5, title: 'Money Basics', subject: 'Economics', age: '5', type: 'Flashcards', icon: Layers },
-  { id: 6, title: 'Supply and Demand', subject: 'Economics', age: '10', type: 'Quickbooks', icon: FileText },
+  { id: 5, title: 'Money Basics', subject: 'Money', age: '5', type: 'Flashcards', icon: Layers },
+  { id: 6, title: 'Supply and Demand', subject: 'Money', age: '10', type: 'Quickbooks', icon: FileText },
   { id: 7, title: 'Ancient Egypt', subject: 'History', age: '9', type: 'Quickbooks', icon: FileText },
   { id: 8, title: 'Continents Map', subject: 'Geography', age: '5', type: 'Flashcards', icon: Layers },
-  { id: 9, title: 'Community Helpers', subject: 'Civics', age: '5', type: 'Flashcards', icon: Layers },
+  { id: 9, title: 'Community Helpers', subject: 'Life Skills', age: '5', type: 'Flashcards', icon: Layers },
   { id: 10, title: 'Flags of the World', subject: 'General Knowledge', age: '6', type: 'Quizzes', icon: CheckSquare },
 ];
 

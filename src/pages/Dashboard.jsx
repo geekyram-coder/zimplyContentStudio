@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, BadgeDollarSign, Landmark, Globe, Gavel, Brain, CheckSquare } from 'lucide-react';
+import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, PiggyBank, Landmark, Globe, HeartHandshake, Brain, CheckSquare } from 'lucide-react';
 import UploadForm from '../components/UploadForm';
 import SearchBar from '../components/SearchBar';
 import { supabase } from '../supabaseClient';
@@ -9,18 +9,18 @@ import { supabase } from '../supabaseClient';
 const mockChartData = {
   '5': [
     { subject: 'Science', quickbooks: 12, flashcards: 25, quizzes: 5 },
-    { subject: 'Economics', quickbooks: 2, flashcards: 8, quizzes: 1 },
+    { subject: 'Money', quickbooks: 2, flashcards: 8, quizzes: 1 },
     { subject: 'History', quickbooks: 5, flashcards: 10, quizzes: 2 },
     { subject: 'Geography', quickbooks: 8, flashcards: 15, quizzes: 4 },
-    { subject: 'Civics', quickbooks: 4, flashcards: 12, quizzes: 3 },
+    { subject: 'Life Skills', quickbooks: 4, flashcards: 12, quizzes: 3 },
     { subject: 'Gen. Knowledge', quickbooks: 15, flashcards: 30, quizzes: 10 },
   ],
   '8': [
     { subject: 'Science', quickbooks: 20, flashcards: 15, quizzes: 12 },
-    { subject: 'Economics', quickbooks: 10, flashcards: 5, quizzes: 8 },
+    { subject: 'Money', quickbooks: 10, flashcards: 5, quizzes: 8 },
     { subject: 'History', quickbooks: 25, flashcards: 20, quizzes: 15 },
     { subject: 'Geography', quickbooks: 18, flashcards: 12, quizzes: 10 },
-    { subject: 'Civics', quickbooks: 15, flashcards: 10, quizzes: 8 },
+    { subject: 'Life Skills', quickbooks: 15, flashcards: 10, quizzes: 8 },
     { subject: 'Gen. Knowledge', quickbooks: 30, flashcards: 25, quizzes: 20 },
   ]
 };
@@ -29,10 +29,10 @@ const AGES = ['5', '6', '7', '8', '9', '10'];
 
 const SUBJECT_ICONS = {
   'Science': FlaskConical,
-  'Economics': BadgeDollarSign,
+  'Money': PiggyBank,
   'History': Landmark,
   'Geography': Globe,
-  'Civics': Gavel,
+  'Life Skills': HeartHandshake,
   'Gen. Knowledge': Brain
 };
 
@@ -115,10 +115,10 @@ export default function Dashboard({ onLogout }) {
   // Fallback to empty array if no specific mock data for selected age
   const chartData = mockChartData[selectedAge] || [
     { subject: 'Science', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
-    { subject: 'Economics', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
+    { subject: 'Money', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'History', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Geography', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
-    { subject: 'Civics', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
+    { subject: 'Life Skills', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Gen. Knowledge', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
   ];
 
