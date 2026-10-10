@@ -13,6 +13,7 @@ const mockTopics = [
   { id: 8, title: 'Continents Map', subject: 'Geography', age: '5', type: 'Flashcards', icon: Layers },
   { id: 9, title: 'Community Helpers', subject: 'Life Skills', age: '5', type: 'Flashcards', icon: Layers },
   { id: 10, title: 'Flags of the World', subject: 'General Knowledge', age: '6', type: 'Quizzes', icon: CheckSquare },
+  { id: 11, title: 'World Cultures', subject: 'Social Studies', age: '8', type: 'Quickbooks', icon: FileText },
 ];
 
 export default function SearchBar() {

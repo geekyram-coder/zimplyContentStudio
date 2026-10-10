@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, PiggyBank, Landmark, Globe, HeartHandshake, Brain, CheckSquare } from 'lucide-react';
+import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, PiggyBank, Landmark, Globe, HeartHandshake, Brain, CheckSquare, Users } from 'lucide-react';
 import UploadForm from '../components/UploadForm';
 import SearchBar from '../components/SearchBar';
 import { supabase } from '../supabaseClient';
@@ -14,6 +14,7 @@ const mockChartData = {
     { subject: 'Geography', quickbooks: 8, flashcards: 15, quizzes: 4 },
     { subject: 'Life Skills', quickbooks: 4, flashcards: 12, quizzes: 3 },
     { subject: 'Gen. Knowledge', quickbooks: 15, flashcards: 30, quizzes: 10 },
+    { subject: 'Social Studies', quickbooks: 6, flashcards: 14, quizzes: 3 },
   ],
   '8': [
     { subject: 'Science', quickbooks: 20, flashcards: 15, quizzes: 12 },
@@ -22,6 +23,7 @@ const mockChartData = {
     { subject: 'Geography', quickbooks: 18, flashcards: 12, quizzes: 10 },
     { subject: 'Life Skills', quickbooks: 15, flashcards: 10, quizzes: 8 },
     { subject: 'Gen. Knowledge', quickbooks: 30, flashcards: 25, quizzes: 20 },
+    { subject: 'Social Studies', quickbooks: 22, flashcards: 18, quizzes: 14 },
   ]
 };
 
@@ -33,7 +35,8 @@ const SUBJECT_ICONS = {
   'History': Landmark,
   'Geography': Globe,
   'Life Skills': HeartHandshake,
-  'Gen. Knowledge': Brain
+  'Gen. Knowledge': Brain,
+  'Social Studies': Users
 };
 
 export default function Dashboard({ onLogout }) {
@@ -120,6 +123,7 @@ export default function Dashboard({ onLogout }) {
     { subject: 'Geography', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Life Skills', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Gen. Knowledge', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
+    { subject: 'Social Studies', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
   ];
 
   return (

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Type, Maximize, Bold, Save, ChevronLeft, ChevronRight, Plus, BookOpen, Palette, Trash2 } from 'lucide-react';
-import { supabase } from '../supabaseClient'; 
+import { supabase, ensureSession } from '../supabaseClient'; 
 import { uploadFileToR2 } from '../r2Client';
 import { resizeImageToPng } from '../utils/imageProcessing';
 
@@ -889,6 +889,7 @@ export default function QuickBookEditor() {
 
     setIsSaving(true);
     try {
+      await ensureSession();
       let qbData;
       
       if (quickbookId) {

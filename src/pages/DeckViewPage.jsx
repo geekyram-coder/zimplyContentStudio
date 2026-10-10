@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
+import { supabase, ensureSession } from '../supabaseClient';
 import { ArrowLeft, LogOut } from 'lucide-react';
 import { uploadFileToR2 } from '../r2Client';
 import { resizeImageToPng } from '../utils/imageProcessing';
@@ -65,6 +65,7 @@ export default function DeckViewPage({ onLogout }) {
     const originalKey = `flashcards/cards/${fileName}`;
     
     try {
+      await ensureSession();
       await uploadFileToR2(file, originalKey, file.type);
       
       const resizedBlob = await resizeImageToPng(file);
@@ -106,6 +107,7 @@ export default function DeckViewPage({ onLogout }) {
     const originalKey = `flashcards/cards/${fileName}`;
     
     try {
+      await ensureSession();
       await uploadFileToR2(newCardFile, originalKey, newCardFile.type);
       
       const resizedBlob = await resizeImageToPng(newCardFile);
@@ -152,6 +154,7 @@ export default function DeckViewPage({ onLogout }) {
     const originalKey = `flashcards/thumbnails/${fileName}`;
     
     try {
+      await ensureSession();
       await uploadFileToR2(file, originalKey, file.type);
       
       const resizedBlob = await resizeImageToPng(file);
