@@ -115,31 +115,326 @@ const DraggableMask = ({ mask, updateMask, removeMask, isActive, setActiveMask }
   );
 };
 
+// --- HELPERS: RICH TEXT EDITING (per-word weight/color stay visible while editing) ---
+const escapeEditorHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Builds the editing DOM from the box model. Each word carries its own style and its
+// word index (data-wi) so styles can follow their words while the text is being typed.
+const buildEditorHtml = (box) => {
+  const text = box.text || '';
+  const chunks = text.match(/\S+|\s+/g) || [];
+  let wordCount = 0;
+  let html = '';
+  chunks.forEach(chunk => {
+    if (/\S/.test(chunk)) {
+      const styles = [];
+      if (box.wordColors && box.wordColors[wordCount]) styles.push(`color:${box.wordColors[wordCount]}`);
+      if (box.wordWeights && box.wordWeights[wordCount]) styles.push(`font-weight:${box.wordWeights[wordCount]}`);
+      html += `<span data-wi="${wordCount}"${styles.length ? ` style="${styles.join(';')}"` : ''}>${escapeEditorHtml(chunk)}</span>`;
+      wordCount++;
+    } else {
+      html += escapeEditorHtml(chunk);
+    }
+  });
+  // Placeholder so an empty box / trailing new line still gets a visible line
+  if (text === '' || text.endsWith('\n')) html += '<br>';
+  return html;
+};
+
+// Reads plain text back from the editing DOM, plus (per character) the word index it came from.
+const readEditorDom = (root) => {
+  let text = '';
+  const sources = [];
+  const walk = (node, src) => {
+    node.childNodes.forEach(child => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const value = child.nodeValue.replace(/ /g, ' ');
+        text += value;
+        for (let i = 0; i < value.length; i++) sources.push(src);
+      } else if (child.nodeName === 'BR') {
+        // layout placeholder only; new lines are stored as "\n" text
+      } else if (child.nodeName === 'DIV' || child.nodeName === 'P') {
+        if (text !== '' && !text.endsWith('\n')) { text += '\n'; sources.push(null); }
+        walk(child, src);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const wi = child.getAttribute('data-wi');
+        walk(child, wi !== null ? Number(wi) : src);
+      }
+    });
+  };
+  walk(root, null);
+  return { text, sources };
+};
+
+// Word index of every character of the current model text (null for whitespace)
+const modelCharSources = (text) => {
+  const sources = new Array(text.length).fill(null);
+  const re = /\S+/g;
+  let m;
+  let idx = 0;
+  while ((m = re.exec(text)) !== null) {
+    for (let i = m.index; i < m.index + m[0].length; i++) sources[i] = idx;
+    idx++;
+  }
+  return sources;
+};
+
+// Re-keys per-word styles after a text edit so each style stays on the word it was applied to
+const remapWordStyles = (box, newText, sources) => {
+  const oldWeights = box.wordWeights || {};
+  const oldColors = box.wordColors || {};
+  const wordWeights = {};
+  const wordColors = {};
+  const re = /\S+/g;
+  let m;
+  let idx = 0;
+  while ((m = re.exec(newText)) !== null) {
+    let src = null;
+    for (let i = m.index; i < m.index + m[0].length; i++) {
+      if (sources[i] !== null && sources[i] !== undefined) { src = sources[i]; break; }
+    }
+    if (src !== null) {
+      if (oldWeights[src]) wordWeights[idx] = oldWeights[src];
+      if (oldColors[src]) wordColors[idx] = oldColors[src];
+    }
+    idx++;
+  }
+  return { wordWeights, wordColors };
+};
+
+const getEditorSelection = (root) => {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+  const offsetOf = (container, offset) => {
+    const r = document.createRange();
+    r.selectNodeContents(root);
+    r.setEnd(container, offset);
+    return readEditorDom(r.cloneContents()).text.length;
+  };
+  const a = offsetOf(range.startContainer, range.startOffset);
+  const b = offsetOf(range.endContainer, range.endOffset);
+  return { start: Math.min(a, b), end: Math.max(a, b) };
+};
+
+const setEditorSelection = (root, start, end) => {
+  const textNodes = [];
+  const collect = (node) => node.childNodes.forEach(c => {
+    if (c.nodeType === Node.TEXT_NODE) textNodes.push(c); else collect(c);
+  });
+  collect(root);
+  const total = textNodes.reduce((sum, n) => sum + n.nodeValue.length, 0);
+  const locate = (target) => {
+    if (target >= total && root.lastChild && root.lastChild.nodeName === 'BR') {
+      return { node: root, offset: root.childNodes.length - 1 };
+    }
+    let acc = 0;
+    for (const node of textNodes) {
+      const len = node.nodeValue.length;
+      if (target <= acc + len) return { node, offset: target - acc };
+      acc += len;
+    }
+    return { node: root, offset: root.childNodes.length };
+  };
+  const s = locate(start);
+  const e = locate(end);
+  const range = document.createRange();
+  range.setStart(s.node, s.offset);
+  range.setEnd(e.node, e.offset);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+};
+
+const getTextOffsetFromPoint = (root, x, y) => {
+  let node = null;
+  let offset = 0;
+  if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(x, y);
+    if (p) { node = p.offsetNode; offset = p.offset; }
+  } else if (document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(x, y);
+    if (r) { node = r.startContainer; offset = r.startOffset; }
+  }
+  if (!node || !root.contains(node)) return null;
+  const r = document.createRange();
+  r.selectNodeContents(root);
+  r.setEnd(node, offset);
+  return r.toString().length;
+};
+
 // --- HELPER COMPONENT: DRAGGABLE TEXT BOX ---
 const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setActiveSelection }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  
-  const actionRef = useRef({ startX: 0, startY: 0, initialX: box.x, initialY: box.y, initialW: box.w });
-  const textareaRef = useRef(null);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '0px'; 
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+  const actionRef = useRef({ startX: 0, startY: 0, initialX: box.x, initialY: box.y, initialW: box.w });
+  const editorRef = useRef(null);
+  const displayRef = useRef(null);
+  const renderedHtmlRef = useRef(null);
+  const pendingSelectionRef = useRef(null);
+  const isComposingRef = useRef(false);
+  const historyRef = useRef({ undo: [], redo: [], lastPush: 0, lastCoalesce: false });
+  const snapshotRef = useRef({ text: box.text, wordWeights: box.wordWeights, wordColors: box.wordColors });
+  const changeSourceRef = useRef(null);
+
+  const editorHtml = buildEditorHtml(box);
+
+  // Keep the editing DOM in sync with the model, preserving the caret / selection
+  React.useLayoutEffect(() => {
+    const el = editorRef.current;
+    if (!el || isComposingRef.current) return;
+    const hasFocus = document.activeElement === el;
+    const usePending = hasFocus && pendingSelectionRef.current;
+    if (renderedHtmlRef.current === editorHtml && !usePending) return;
+    const selection = usePending ? pendingSelectionRef.current : (hasFocus ? getEditorSelection(el) : null);
+    if (usePending) pendingSelectionRef.current = null;
+    if (renderedHtmlRef.current !== editorHtml) {
+      el.innerHTML = editorHtml;
+      renderedHtmlRef.current = editorHtml;
     }
-  }, [box.text, box.w, box.fontSizePx, box.fontFamily, box.fontWeight, box.wordSpacingPx, isEditing]);
+    if (selection && hasFocus) setEditorSelection(el, selection.start, selection.end);
+  });
+
+  // Undo history (covers typing and per-word style changes made while the box is active)
+  useEffect(() => {
+    const prev = snapshotRef.current;
+    if (prev.text === box.text && prev.wordWeights === box.wordWeights && prev.wordColors === box.wordColors) return;
+    const source = changeSourceRef.current;
+    changeSourceRef.current = null;
+    if (source === null) {
+      const h = historyRef.current;
+      h.undo.push(prev);
+      if (h.undo.length > 200) h.undo.shift();
+      h.redo = [];
+      h.lastCoalesce = false;
+    }
+    snapshotRef.current = { text: box.text, wordWeights: box.wordWeights, wordColors: box.wordColors };
+  }, [box.text, box.wordWeights, box.wordColors]);
 
   useEffect(() => {
     if (!isActive) setIsEditing(false);
   }, [isActive]);
 
   useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.focus();
+    if (isEditing && editorRef.current) {
+      const el = editorRef.current;
+      el.focus();
+      const len = (box.text || '').length;
+      const sel = pendingSelectionRef.current || { start: len, end: len };
+      pendingSelectionRef.current = null;
+      setEditorSelection(el, sel.start, sel.end);
     }
   }, [isEditing]);
+
+  // Report the selected range (as plain-text offsets) to the properties panel
+  useEffect(() => {
+    if (!isEditing) return;
+    const onSelectionChange = () => {
+      const el = editorRef.current;
+      if (!el) return;
+      const sel = getEditorSelection(el);
+      if (!sel) return;
+      setActiveSelection(prev => (prev.boxId === box.id && prev.start === sel.start && prev.end === sel.end) ? prev : { start: sel.start, end: sel.end, boxId: box.id });
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, [isEditing, box.id, setActiveSelection]);
+
+  const recordHistory = (coalesce) => {
+    const h = historyRef.current;
+    const now = Date.now();
+    if (!(coalesce && h.lastCoalesce && now - h.lastPush < 1000)) {
+      h.undo.push(snapshotRef.current);
+      if (h.undo.length > 200) h.undo.shift();
+    }
+    h.lastPush = now;
+    h.lastCoalesce = coalesce;
+    h.redo = [];
+  };
+
+  const commitEditorText = (newText, sources, selection, coalesce) => {
+    const styles = remapWordStyles(box, newText, sources);
+    recordHistory(coalesce);
+    changeSourceRef.current = 'editor';
+    if (selection) pendingSelectionRef.current = selection;
+    updateBox(box.id, { text: newText, wordWeights: styles.wordWeights, wordColors: styles.wordColors });
+  };
+
+  const insertPlainText = (str) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const text = box.text || '';
+    const sel = getEditorSelection(el) || { start: text.length, end: text.length };
+    const oldSources = modelCharSources(text);
+    const newText = text.slice(0, sel.start) + str + text.slice(sel.end);
+    const sources = [...oldSources.slice(0, sel.start), ...new Array(str.length).fill(null), ...oldSources.slice(sel.end)];
+    const caret = sel.start + str.length;
+    commitEditorText(newText, sources, { start: caret, end: caret }, false);
+  };
+
+  const handleEditorInput = () => {
+    if (isComposingRef.current) return;
+    const el = editorRef.current;
+    if (!el) return;
+    const { text: newText, sources } = readEditorDom(el);
+    if (newText !== (box.text || '')) {
+      commitEditorText(newText, sources, null, true);
+    } else {
+      // Text unchanged (e.g. browser-inserted formatting): restore the model's rendering
+      const sel = getEditorSelection(el);
+      el.innerHTML = editorHtml;
+      renderedHtmlRef.current = editorHtml;
+      if (sel) setEditorSelection(el, sel.start, sel.end);
+    }
+  };
+
+  const applyHistory = (fromKey, toKey) => {
+    const h = historyRef.current;
+    if (h.undo.length === 0 && fromKey === 'undo') return;
+    if (h.redo.length === 0 && fromKey === 'redo') return;
+    const target = h[fromKey].pop();
+    h[toKey].push(snapshotRef.current);
+    h.lastCoalesce = false;
+    const el = editorRef.current;
+    const currentText = box.text || '';
+    const targetText = target.text || '';
+    let selection = el ? getEditorSelection(el) : null;
+    if (targetText !== currentText) {
+      let suffix = 0;
+      while (suffix < targetText.length && suffix < currentText.length &&
+             targetText[targetText.length - 1 - suffix] === currentText[currentText.length - 1 - suffix]) suffix++;
+      const caret = targetText.length - suffix;
+      selection = { start: caret, end: caret };
+    }
+    changeSourceRef.current = 'history';
+    if (selection) pendingSelectionRef.current = selection;
+    updateBox(box.id, { text: target.text, wordWeights: target.wordWeights, wordColors: target.wordColors });
+  };
+
+  const handleEditorKeyDown = (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      insertPlainText('\n');
+    } else if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      applyHistory('undo', 'redo');
+    } else if (mod && ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y')) {
+      e.preventDefault();
+      applyHistory('redo', 'undo');
+    } else if (mod && ['b', 'i', 'u'].includes(e.key.toLowerCase())) {
+      e.preventDefault(); // keep the browser's own rich formatting out of the text
+    }
+  };
+
+  const handleEditorPaste = (e) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData.getData('text/plain') || '').replace(/\r\n?/g, '\n');
+    if (pasted) insertPlainText(pasted);
+  };
 
   const startDrag = (e) => {
     e.stopPropagation();
@@ -159,11 +454,22 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
 
   const handleDoubleClick = (e) => {
     e.stopPropagation();
+    // Start editing with the double-clicked word selected
+    const text = box.text || '';
+    const offset = displayRef.current ? getTextOffsetFromPoint(displayRef.current, e.clientX, e.clientY) : null;
+    if (offset !== null) {
+      let selection = { start: offset, end: offset };
+      const re = /\S+/g;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (offset >= m.index && offset < m.index + m[0].length) {
+          selection = { start: m.index, end: m.index + m[0].length };
+          break;
+        }
+      }
+      pendingSelectionRef.current = selection;
+    }
     setIsEditing(true);
-  };
-
-  const handleSelectionChange = (e) => {
-    setActiveSelection({ start: e.target.selectionStart, end: e.target.selectionEnd, boxId: box.id });
   };
 
   useEffect(() => {
@@ -232,14 +538,15 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
       }}
     >
       {isActive && !isEditing && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); removeBox(box.id); }} 
+        <button
+          onClick={(e) => { e.stopPropagation(); removeBox(box.id); }}
           style={{ position: 'absolute', top: '-26px', right: '-1px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' }}
         >Delete</button>
       )}
-      
+
       <div style={{ position: 'relative', width: '100%', height: '100%' }}>
         <div
+          ref={displayRef}
           onMouseDown={!isEditing ? startDrag : undefined}
           onDoubleClick={!isEditing ? handleDoubleClick : undefined}
           style={{
@@ -255,18 +562,25 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
           {renderColoredText()}
         </div>
 
-        <textarea
-          ref={textareaRef} 
-          value={box.text} 
-          onChange={(e) => updateBox(box.id, { text: e.target.value })}
-          onBlur={() => setIsEditing(false)} 
-          onSelect={handleSelectionChange}
-          onKeyUp={handleSelectionChange}
+        <div
+          ref={editorRef}
+          contentEditable={isEditing}
+          suppressContentEditableWarning
+          spellCheck
+          onInput={handleEditorInput}
+          onKeyDown={handleEditorKeyDown}
+          onPaste={handleEditorPaste}
+          onCompositionStart={() => { isComposingRef.current = true; }}
+          onCompositionEnd={() => { isComposingRef.current = false; handleEditorInput(); }}
+          onBlur={() => setIsEditing(false)}
           style={{
             ...commonStyles,
             position: 'relative',
-            background: 'transparent', border: 'none', outline: 'none', resize: 'none', 
-            color: box.color || '#000000', overflow: 'hidden', 
+            display: 'inline-block', verticalAlign: 'baseline', // same line-box footprint as the previous <textarea>
+            whiteSpace: 'pre-wrap', wordWrap: 'break-word',
+            background: 'transparent', border: 'none', outline: 'none',
+            color: box.color || '#000000', overflow: 'hidden',
+            cursor: 'text',
             opacity: isEditing ? 1 : 0,
             pointerEvents: isEditing ? 'auto' : 'none',
             zIndex: 2
@@ -314,7 +628,6 @@ export default function QuickBookEditor() {
   const [activeMaskId, setActiveMaskId] = useState(null);
   const [activeSelection, setActiveSelection] = useState({ start: 0, end: 0, boxId: null });
   const [highlightColor, setHighlightColor] = useState('#e74c3c');
-  const [selectionWeight, setSelectionWeight] = useState('800');
 
   const currentPage = pages[currentPageIndex] || pages[0];
   const activeBox = currentPage?.boxes.find(b => b.id === activeBoxId);
@@ -598,7 +911,7 @@ export default function QuickBookEditor() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
       if (activeBoxId) {
         if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeBox(activeBoxId); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateBox(activeBoxId); }
@@ -662,7 +975,7 @@ export default function QuickBookEditor() {
     updateBox(activeBoxId, { wordColors: newWordColors });
   };
 
-  const applyWordWeight = () => {
+  const setWordWeight = (weight) => {
     if (!activeBoxId || activeSelection.boxId !== activeBoxId) return;
     const box = currentPage.boxes.find(b => b.id === activeBoxId);
     if (!box) return;
@@ -682,7 +995,7 @@ export default function QuickBookEditor() {
       const wordStart = match.index;
       const wordEnd = wordStart + match[0].length;
       if (start < wordEnd && end > wordStart) {
-        newWordWeights[wordCount] = selectionWeight;
+        newWordWeights[wordCount] = weight;
       }
       wordCount++;
     }
@@ -712,6 +1025,21 @@ export default function QuickBookEditor() {
     }
     updateBox(activeBoxId, { wordWeights: newWordWeights });
   };
+
+  const selectedWordsWeight = (() => {
+    if (!activeBox || activeSelection.boxId !== activeBox.id || activeSelection.start === activeSelection.end) return null;
+    const weights = new Set();
+    const wordRegex = /\S+/g;
+    let match;
+    let wordCount = 0;
+    while ((match = wordRegex.exec(activeBox.text || '')) !== null) {
+      if (activeSelection.start < match.index + match[0].length && activeSelection.end > match.index) {
+        weights.add(String((activeBox.wordWeights && activeBox.wordWeights[wordCount]) || activeBox.fontWeight));
+      }
+      wordCount++;
+    }
+    return weights.size === 1 ? [...weights][0] : null;
+  })();
 
   // --- DB EXTRACTOR ---
   const extractPageData = useCallback((pageData, spreadIndex) => {
@@ -1221,20 +1549,25 @@ export default function QuickBookEditor() {
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }}>
                 <Bold size={14} /> Weight for Specific Words
               </label>
-              <p style={{ fontSize: '10px', color: '#666', margin: '0 0 10px 0', lineHeight: '1.3' }}>Double-click text, highlight target words, pick a weight, and apply.</p>
+              <p style={{ fontSize: '10px', color: '#666', margin: '0 0 10px 0', lineHeight: '1.3' }}>Double-click text and select words, then click a weight. It applies instantly and the words stay selected.</p>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <select value={selectionWeight} onChange={(e) => setSelectionWeight(e.target.value)} style={{ flex: 1, padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '11px' }}>
-                  <option value="400">Regular (400)</option>
-                  <option value="600">Semi-Bold (600)</option>
-                  <option value="800">Extra-Bold (800)</option>
-                </select>
-                <button onClick={applyWordWeight} style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#26B8F5', color: '#fff', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>
-                  Apply to Selection
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                {[['400', 'Regular'], ['600', 'Semi-Bold'], ['800', 'Extra-Bold']].map(([weight, label]) => {
+                  const isCurrent = selectedWordsWeight === weight;
+                  return (
+                    <button
+                      key={weight}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setWordWeight(weight)}
+                      style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: weight, background: isCurrent ? '#26B8F5' : '#fff', color: isCurrent ? '#fff' : '#333', border: isCurrent ? '1px solid #26B8F5' : '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
 
-              <button onClick={clearWordWeight} style={{ width: '100%', padding: '6px', fontSize: '10px', background: 'transparent', color: '#e74c3c', border: '1px solid #e74c3c', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button onMouseDown={(e) => e.preventDefault()} onClick={clearWordWeight} style={{ width: '100%', padding: '6px', fontSize: '10px', background: 'transparent', color: '#e74c3c', border: '1px solid #e74c3c', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Clear Weight from Selection
               </button>
             </div>
