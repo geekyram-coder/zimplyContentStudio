@@ -211,8 +211,9 @@ const DraggableBox = ({ box, updateBox, removeBox, isActive, setActiveBox, setAc
     return chunks.map((chunk, i) => {
       if (/\S/.test(chunk)) {
         const color = (box.wordColors && box.wordColors[wordCount]) ? box.wordColors[wordCount] : (box.color || '#000000');
+        const fontWeight = (box.wordWeights && box.wordWeights[wordCount]) ? box.wordWeights[wordCount] : undefined;
         wordCount++;
-        return <span key={i} style={{ color }}>{chunk}</span>;
+        return <span key={i} style={{ color, fontWeight }}>{chunk}</span>;
       } else {
         return <span key={i}>{chunk}</span>;
       }
@@ -313,6 +314,7 @@ export default function QuickBookEditor() {
   const [activeMaskId, setActiveMaskId] = useState(null);
   const [activeSelection, setActiveSelection] = useState({ start: 0, end: 0, boxId: null });
   const [highlightColor, setHighlightColor] = useState('#e74c3c');
+  const [selectionWeight, setSelectionWeight] = useState('800');
 
   const currentPage = pages[currentPageIndex] || pages[0];
   const activeBox = currentPage?.boxes.find(b => b.id === activeBoxId);
@@ -404,6 +406,7 @@ export default function QuickBookEditor() {
                   const doc = parser.parseFromString(item.text || "", 'text/html');
                   let rawText = "";
                   let wordColors = {};
+                  let wordWeights = {};
                   let wordCount = 0;
 
                   Array.from(doc.body.childNodes).forEach(node => {
@@ -418,10 +421,12 @@ export default function QuickBookEditor() {
                       } else if (node.tagName === 'SPAN') {
                         const txt = node.textContent;
                         const color = node.style.color;
+                        const weight = node.style.fontWeight;
                         const words = txt.match(/\S+/g);
                         if (words) {
                           words.forEach(() => {
-                            wordColors[wordCount] = color;
+                            if (color) wordColors[wordCount] = color;
+                            if (weight) wordWeights[wordCount] = weight;
                             wordCount++;
                           });
                         }
@@ -440,6 +445,7 @@ export default function QuickBookEditor() {
                     id: `box-${Math.random()}`,
                     text: rawText,
                     wordColors: wordColors,
+                    wordWeights: wordWeights,
                     x, y, w,
                     fontSizePx,
                     fontWeight: item.fontWeight || 'normal',
@@ -656,6 +662,57 @@ export default function QuickBookEditor() {
     updateBox(activeBoxId, { wordColors: newWordColors });
   };
 
+  const applyWordWeight = () => {
+    if (!activeBoxId || activeSelection.boxId !== activeBoxId) return;
+    const box = currentPage.boxes.find(b => b.id === activeBoxId);
+    if (!box) return;
+
+    const { start, end } = activeSelection;
+    if (start === end) {
+      alert("Please highlight/select some words in the text box first.");
+      return;
+    }
+
+    const newWordWeights = { ...(box.wordWeights || {}) };
+    const wordRegex = /\S+/g;
+    let match;
+    let wordCount = 0;
+
+    while ((match = wordRegex.exec(box.text)) !== null) {
+      const wordStart = match.index;
+      const wordEnd = wordStart + match[0].length;
+      if (start < wordEnd && end > wordStart) {
+        newWordWeights[wordCount] = selectionWeight;
+      }
+      wordCount++;
+    }
+    updateBox(activeBoxId, { wordWeights: newWordWeights });
+  };
+
+  const clearWordWeight = () => {
+    if (!activeBoxId || activeSelection.boxId !== activeBoxId) return;
+    const box = currentPage.boxes.find(b => b.id === activeBoxId);
+    if (!box) return;
+
+    const { start, end } = activeSelection;
+    if (start === end) return;
+
+    const newWordWeights = { ...(box.wordWeights || {}) };
+    const wordRegex = /\S+/g;
+    let match;
+    let wordCount = 0;
+
+    while ((match = wordRegex.exec(box.text)) !== null) {
+      const wordStart = match.index;
+      const wordEnd = wordStart + match[0].length;
+      if (start < wordEnd && end > wordStart) {
+        delete newWordWeights[wordCount];
+      }
+      wordCount++;
+    }
+    updateBox(activeBoxId, { wordWeights: newWordWeights });
+  };
+
   // --- DB EXTRACTOR ---
   const extractPageData = useCallback((pageData, spreadIndex) => {
     const leftBoxes = [];
@@ -687,6 +744,7 @@ export default function QuickBookEditor() {
     const formatTextWithColors = (box) => {
       const text = box.text || "";
       const wordColors = box.wordColors || {};
+      const wordWeights = box.wordWeights || {};
       const wordRegex = /\S+|\s+/g;
       let wordCount = 0;
       const chunks = text.match(wordRegex) || [];
@@ -694,8 +752,11 @@ export default function QuickBookEditor() {
       let resultHtml = "";
       chunks.forEach(chunk => {
         if (/\S/.test(chunk)) {
-          if (wordColors[wordCount]) {
-             resultHtml += `<span style="color:${wordColors[wordCount]}">${chunk}</span>`;
+          const styleParts = [];
+          if (wordColors[wordCount]) styleParts.push(`color:${wordColors[wordCount]}`);
+          if (wordWeights[wordCount]) styleParts.push(`font-weight:${wordWeights[wordCount]}`);
+          if (styleParts.length > 0) {
+             resultHtml += `<span style="${styleParts.join(';')}">${chunk}</span>`;
           } else {
              resultHtml += chunk;
           }
@@ -1153,6 +1214,28 @@ export default function QuickBookEditor() {
 
               <button onClick={clearHighlight} style={{ width: '100%', padding: '6px', fontSize: '10px', background: 'transparent', color: '#e74c3c', border: '1px solid #e74c3c', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Clear Highlight from Selection
+              </button>
+            </div>
+
+            <div style={{ padding: '12px', backgroundColor: '#eef2f5', borderRadius: '6px', border: '1px solid #dce4e8' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }}>
+                <Bold size={14} /> Weight for Specific Words
+              </label>
+              <p style={{ fontSize: '10px', color: '#666', margin: '0 0 10px 0', lineHeight: '1.3' }}>Double-click text, highlight target words, pick a weight, and apply.</p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <select value={selectionWeight} onChange={(e) => setSelectionWeight(e.target.value)} style={{ flex: 1, padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '11px' }}>
+                  <option value="400">Regular (400)</option>
+                  <option value="600">Semi-Bold (600)</option>
+                  <option value="800">Extra-Bold (800)</option>
+                </select>
+                <button onClick={applyWordWeight} style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#26B8F5', color: '#fff', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>
+                  Apply to Selection
+                </button>
+              </div>
+
+              <button onClick={clearWordWeight} style={{ width: '100%', padding: '6px', fontSize: '10px', background: 'transparent', color: '#e74c3c', border: '1px solid #e74c3c', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                Clear Weight from Selection
               </button>
             </div>
             
