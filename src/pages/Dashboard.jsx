@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, PiggyBank, Landmark, Globe, HeartHandshake, Brain, CheckSquare, Users, BookA } from 'lucide-react';
+import { LogOut, LayoutDashboard, BookOpen, Layers, FlaskConical, Laptop, Landmark, Globe, HeartHandshake, Brain, CheckSquare, Users, BookA } from 'lucide-react';
 import UploadForm from '../components/UploadForm';
 import SearchBar from '../components/SearchBar';
 import { supabase } from '../supabaseClient';
@@ -9,7 +9,7 @@ import { supabase } from '../supabaseClient';
 const mockChartData = {
   '5': [
     { subject: 'Science', quickbooks: 12, flashcards: 25, quizzes: 5 },
-    { subject: 'Money', quickbooks: 2, flashcards: 8, quizzes: 1 },
+    { subject: 'Computer Science', quickbooks: 2, flashcards: 8, quizzes: 1 },
     { subject: 'History', quickbooks: 5, flashcards: 10, quizzes: 2 },
     { subject: 'Geography', quickbooks: 8, flashcards: 15, quizzes: 4 },
     { subject: 'Life Skills', quickbooks: 4, flashcards: 12, quizzes: 3 },
@@ -19,7 +19,7 @@ const mockChartData = {
   ],
   '8': [
     { subject: 'Science', quickbooks: 20, flashcards: 15, quizzes: 12 },
-    { subject: 'Money', quickbooks: 10, flashcards: 5, quizzes: 8 },
+    { subject: 'Computer Science', quickbooks: 10, flashcards: 5, quizzes: 8 },
     { subject: 'History', quickbooks: 25, flashcards: 20, quizzes: 15 },
     { subject: 'Geography', quickbooks: 18, flashcards: 12, quizzes: 10 },
     { subject: 'Life Skills', quickbooks: 15, flashcards: 10, quizzes: 8 },
@@ -33,7 +33,7 @@ const AGES = ['5', '6', '7', '8', '9', '10'];
 
 const SUBJECT_ICONS = {
   'Science': FlaskConical,
-  'Money': PiggyBank,
+  'Computer Science': Laptop,
   'History': Landmark,
   'Geography': Globe,
   'Life Skills': HeartHandshake,
@@ -121,7 +121,7 @@ export default function Dashboard({ onLogout }) {
   // Fallback to empty array if no specific mock data for selected age
   const chartData = mockChartData[selectedAge] || [
     { subject: 'Science', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
-    { subject: 'Money', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
+    { subject: 'Computer Science', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'History', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Geography', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },
     { subject: 'Life Skills', quickbooks: Math.floor(Math.random() * 20), flashcards: Math.floor(Math.random() * 20), quizzes: Math.floor(Math.random() * 20) },

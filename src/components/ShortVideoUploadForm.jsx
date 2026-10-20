@@ -16,7 +16,7 @@ import {
   formatDuration,
 } from '../utils/videoProcessing';
 
-const SHORT_SUBJECTS = ['Science', 'Money', 'History', 'Geography', 'Life Skills', 'Gen. Knowledge', 'Social Studies', 'English'];
+const SHORT_SUBJECTS = ['Science', 'Computer Science', 'History', 'Geography', 'Life Skills', 'Gen. Knowledge', 'Social Studies', 'English'];
 
 // The age groups Content Studio publishes for. A new short is pre-filled
 // with all of them; narrow it down to e.g. [8, 9, 10].
