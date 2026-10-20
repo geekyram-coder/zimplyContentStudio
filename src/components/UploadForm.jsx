@@ -6,7 +6,7 @@ import { uploadFileToR2 } from '../r2Client';
 import { resizeImageToPng } from '../utils/imageProcessing';
 
 
-const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes', 'Free Questions'];
+const CONTENT_TYPES = ['Quickbooks', 'Flashcards', 'Quizzes', 'Free Questions', 'Shorts Videos'];
 const FLASHCARD_TYPES = ['Cover Card', 'Story Card', 'Think Card', 'Guess Card', 'Celebration Card', 'Imagination Card', 'Challenge Card'];
 
 export default function UploadForm() {
@@ -436,6 +436,8 @@ export default function UploadForm() {
               const val = e.target.value;
               if (val === 'Quickbooks') {
                 navigate('/quickbooks/create');
+              } else if (val === 'Shorts Videos') {
+                navigate('/cheat-study-videos');
               } else {
                 setContentType(val);
                 setFiles([]);

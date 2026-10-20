@@ -7,6 +7,7 @@ import DeckViewPage from './pages/DeckViewPage';
 import QuickBookCreator from './pages/QuickBookCreator';
 import QuickBookEditor from './pages/QuickBookEditor';
 import QuickBooksPage from './pages/QuickBooksPage';
+import CheatStudyVideosPage from './pages/CheatStudyVideosPage';
 import { supabase } from './supabaseClient';
 import './App.css';
 
@@ -87,6 +88,10 @@ function App() {
           <Route 
             path="/quickbooks/create" 
             element={isLoggedIn ? <QuickBookCreator /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/cheat-study-videos" 
+            element={isLoggedIn ? <CheatStudyVideosPage onLogout={handleLogout} /> : <Navigate to="/login" />} 
           />
         </Routes>
       </div>
