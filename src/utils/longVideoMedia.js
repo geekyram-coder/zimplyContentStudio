@@ -6,11 +6,12 @@ import { uploadBlobToR2 } from './r2MultipartUpload';
  * R2 storage for long-format videos.
  *
  * Same bucket and credentials as the rest of Content Studio, but long videos
- * are served from the Kid Monk custom domain instead of the r2.dev
- * development URL. In Cloudflare, `media.kidmonk.in` must be connected to the
+ * are served from the Kid Monk custom domain instead of the rate-limited
+ * r2.dev development URL. `storage.kidmonk.in` is already connected to the
  * `zimply-content` bucket as an R2 custom domain (R2 > zimply-content >
- * Settings > Custom Domains). Override with VITE_LONG_VIDEO_PUBLIC_BASE_URL
- * if a different host is used.
+ * Settings > Custom Domains), so it serves every object in the bucket through
+ * the Cloudflare cache. Override with VITE_LONG_VIDEO_PUBLIC_BASE_URL if a
+ * different host is used.
  */
 
 const R2_ACCOUNT_ID = '330822ed628fddd0c6c00a5f735dfa0e';
@@ -19,7 +20,7 @@ const VIDEO_PREFIX = 'long_videos';
 const POSTER_PREFIX = `${VIDEO_PREFIX}/posters`;
 
 export const LONG_VIDEO_PUBLIC_BASE_URL = String(
-  import.meta.env?.VITE_LONG_VIDEO_PUBLIC_BASE_URL || 'https://media.kidmonk.in',
+  import.meta.env?.VITE_LONG_VIDEO_PUBLIC_BASE_URL || 'https://storage.kidmonk.in',
 ).replace(/\/+$/, '');
 
 // Every key is derived from the row id, so an object is never overwritten and
