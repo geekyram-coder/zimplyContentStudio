@@ -828,12 +828,14 @@ export default function QuickBookCreator() {
       const isAudio = !isImage && (AUDIO_EXTS.includes(ext) || (file.type || '').startsWith('audio/'));
       const isText = !isImage && !isAudio && TEXT_EXTS.includes(ext);
       const isNumber = /^\d+$/.test(base);
+      const timingSuffixMatch = base.match(/^(\d+)_[a-z]+$/); // e.g. 1_eng.txt
 
       if (base === 'm' && isText) metaFile = file;
       else if (base === 't' && isImage) thumbFile = file;
       else if (isNumber && isImage) images[parseInt(base, 10)] = file;
       else if (isNumber && isAudio) audios[parseInt(base, 10)] = file;
       else if (isNumber && isText) timings[parseInt(base, 10)] = file;
+      else if (timingSuffixMatch && isText) timings[parseInt(timingSuffixMatch[1], 10)] = file;
       else ignored.push(name);
     });
 
@@ -1439,7 +1441,7 @@ export default function QuickBookCreator() {
               M.txt/.json = Book Details JSON, T = Thumbnail<br />
               0, 1, 2… images = spread backgrounds (0 = cover)<br />
               1, 2, 3… audio = spread audio<br />
-              1.txt/.json, 2.txt… = spread timings JSON
+              1.txt or 1_eng.txt (.json), 2_eng… = spread timings JSON
             </p>
             <input
               ref={bulkInputRef}
