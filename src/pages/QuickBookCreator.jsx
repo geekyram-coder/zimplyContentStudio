@@ -774,6 +774,123 @@ export default function QuickBookCreator() {
     }
   };
 
+  // --- BULK FOLDER DROP ---
+  // M.txt / M.json -> Book Details JSON, T.<image> -> Thumbnail,
+  // <n>.<image> -> spread n background, <n>.<audio> -> spread n audio, <n>.txt / <n>.json -> spread n timings JSON
+  const [isBulkDragOver, setIsBulkDragOver] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState(null);
+  const bulkInputRef = useRef(null);
+
+  const collectDroppedFiles = async (dataTransfer) => {
+    // Entries must be taken synchronously, before any await
+    const entries = Array.from(dataTransfer.items || [])
+      .map(item => (item.kind === 'file' && item.webkitGetAsEntry) ? item.webkitGetAsEntry() : null)
+      .filter(Boolean);
+    if (entries.length === 0) return Array.from(dataTransfer.files || []);
+
+    const files = [];
+    const readEntry = async (entry) => {
+      if (entry.isFile) {
+        files.push(await new Promise((resolve, reject) => entry.file(resolve, reject)));
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        let batch;
+        do {
+          batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+          for (const child of batch) await readEntry(child);
+        } while (batch.length > 0);
+      }
+    };
+    for (const entry of entries) await readEntry(entry);
+    return files;
+  };
+
+  const handleBulkFiles = async (fileList) => {
+    const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
+    const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'flac', 'opus'];
+    const TEXT_EXTS = ['txt', 'json'];
+    const readText = async (file) => (await file.text()).replace(/^﻿/, '');
+
+    let metaFile = null;
+    let thumbFile = null;
+    const images = {};
+    const audios = {};
+    const timings = {};
+    const ignored = [];
+
+    fileList.forEach(file => {
+      const name = file.name || '';
+      if (name.startsWith('.') || name.toLowerCase() === 'thumbs.db' || name.toLowerCase() === 'desktop.ini') return;
+      const dot = name.lastIndexOf('.');
+      const base = (dot > 0 ? name.slice(0, dot) : name).trim().toLowerCase();
+      const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+      const isImage = IMAGE_EXTS.includes(ext) || (file.type || '').startsWith('image/');
+      const isAudio = !isImage && (AUDIO_EXTS.includes(ext) || (file.type || '').startsWith('audio/'));
+      const isText = !isImage && !isAudio && TEXT_EXTS.includes(ext);
+      const isNumber = /^\d+$/.test(base);
+
+      if (base === 'm' && isText) metaFile = file;
+      else if (base === 't' && isImage) thumbFile = file;
+      else if (isNumber && isImage) images[parseInt(base, 10)] = file;
+      else if (isNumber && isAudio) audios[parseInt(base, 10)] = file;
+      else if (isNumber && isText) timings[parseInt(base, 10)] = file;
+      else ignored.push(name);
+    });
+
+    const metaText = metaFile ? await readText(metaFile) : null;
+    const timingTexts = {};
+    for (const idx of Object.keys(timings)) timingTexts[idx] = await readText(timings[idx]);
+
+    if (metaText !== null) setMetaJson(metaText);
+
+    if (thumbFile) {
+      if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl);
+      setThumbnailObj(thumbFile);
+      setThumbnailUrl(URL.createObjectURL(thumbFile));
+    }
+
+    const indices = [...Object.keys(images), ...Object.keys(audios), ...Object.keys(timingTexts)].map(Number);
+    if (indices.length > 0) {
+      const maxIndex = Math.max(...indices);
+      const nextPages = [...pagesRef.current];
+      while (nextPages.length <= maxIndex) {
+        nextPages.push({ id: `page-${Date.now()}-${nextPages.length}`, bgImage: null, fileObj: null, audioUrl: null, audioFileObj: null, boxes: [], masks: [], assemblyJsonStr: '' });
+      }
+      const updatedPages = nextPages.map((p, i) => {
+        const updates = {};
+        if (images[i]) {
+          if (p.bgImage && p.bgImage.startsWith('blob:')) URL.revokeObjectURL(p.bgImage);
+          updates.bgImage = URL.createObjectURL(images[i]);
+          updates.fileObj = images[i];
+        }
+        if (audios[i]) {
+          if (p.audioUrl && p.audioUrl.startsWith('blob:')) URL.revokeObjectURL(p.audioUrl);
+          updates.audioUrl = URL.createObjectURL(audios[i]);
+          updates.audioFileObj = audios[i];
+        }
+        if (timingTexts[i] !== undefined) updates.assemblyJsonStr = timingTexts[i];
+        return Object.keys(updates).length > 0 ? { ...p, ...updates } : p;
+      });
+      setPages(updatedPages);
+    }
+
+    const filled = [];
+    if (metaText !== null) filled.push('Book Details JSON');
+    if (thumbFile) filled.push('Thumbnail');
+    if (Object.keys(images).length) filled.push(`${Object.keys(images).length} spread image(s)`);
+    if (Object.keys(audios).length) filled.push(`${Object.keys(audios).length} audio file(s)`);
+    if (Object.keys(timingTexts).length) filled.push(`${Object.keys(timingTexts).length} timings JSON`);
+    setBulkStatus({ filled, ignored });
+  };
+
+  const handleBulkDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsBulkDragOver(false);
+    const files = await collectDroppedFiles(e.dataTransfer);
+    await handleBulkFiles(files);
+  };
+
   const addBox = () => {
     const newId = Date.now().toString();
     const newBox = { id: newId, text: "New text block", x: 50, y: 50, w: 200, fontSizePx: 16, fontWeight: "600", fontFamily: "Nunito", color: "#000000", wordSpacingPx: 4, wordColors: {} };
@@ -1309,6 +1426,36 @@ export default function QuickBookCreator() {
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', borderBottom: '2px solid #ddd', paddingBottom: '8px', marginBottom: '15px' }}>
             <BookOpen size={16} /> Book Details (JSON)
           </h3>
+          <div
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsBulkDragOver(true); }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsBulkDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); if (!e.currentTarget.contains(e.relatedTarget)) setIsBulkDragOver(false); }}
+            onDrop={handleBulkDrop}
+            onClick={() => bulkInputRef.current && bulkInputRef.current.click()}
+            style={{ marginBottom: '15px', padding: '14px 10px', border: `2px dashed ${isBulkDragOver ? '#26B8F5' : '#bbb'}`, borderRadius: '6px', backgroundColor: isBulkDragOver ? '#e8f7fe' : '#fff', textAlign: 'center', cursor: 'pointer' }}
+          >
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#123C52', margin: '0 0 4px 0' }}>Drop the QuickBook folder here</p>
+            <p style={{ fontSize: '10px', color: '#666', margin: 0, lineHeight: '1.4' }}>
+              M.txt/.json = Book Details JSON, T = Thumbnail<br />
+              0, 1, 2… images = spread backgrounds (0 = cover)<br />
+              1, 2, 3… audio = spread audio<br />
+              1.txt/.json, 2.txt… = spread timings JSON
+            </p>
+            <input
+              ref={bulkInputRef}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onClick={(e) => e.stopPropagation()}
+              onChange={async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) await handleBulkFiles(files); }}
+            />
+            {bulkStatus && (
+              <div style={{ marginTop: '8px', fontSize: '10px', textAlign: 'left', lineHeight: '1.4' }}>
+                <div style={{ color: '#27ae60' }}>Filled: {bulkStatus.filled.length ? bulkStatus.filled.join(', ') : 'nothing'}</div>
+                {bulkStatus.ignored.length > 0 && <div style={{ color: '#e74c3c' }}>Not recognised: {bulkStatus.ignored.join(', ')}</div>}
+              </div>
+            )}
+          </div>
           <div style={{ marginBottom: '12px' }}>
             <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>Paste the meta data JSON here.</p>
             <textarea 
